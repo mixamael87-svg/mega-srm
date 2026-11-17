@@ -1,0 +1,23 @@
+{
+  "status": "success",
+  "data": [
+    {
+      "id": 55225,
+      "formId": 1,
+      "primaryContact": { "id": 43692, "lName": "Палій", "fName": "Анна", "mName": "", "phone": ["0666444199"], "company": "" },
+      "products": [
+        { "amount": 1, "productId": 2947, "price": 76, "costPrice": 24.5, "discount": 0, "percentDiscount": 0, "sku": "0935", "barcode": "", "text": "Заводна іграшка для купання \"Кит\" (синій)",
+          "priceTypes": [{ "price": 48, "currencyId": 2, "name": "Оптова Ціна", "id": 1 }] },
+        { "amount": 1, "productId": 972, "price": 91, "costPrice": 29.4, "discount": 0, "percentDiscount": 0, "sku": "0919", "barcode": "", "text": "Заводна іграшка для купання \"Черепашка\" (зелена)",
+          "priceTypes": [{ "price": 57.599999999999994, "currencyId": 2, "name": "Оптова Ціна", "id": 1 }] }
+      ],
+      "organizationId": null,
+      "orderTime": "2026-11-16 14:05:00",
+      "statusId": 4,
+      "paymentAmount": 167,
+      "discountAmount": 0
+    }
+  ],
+  "pagination": { "currentPage": 1, "pageCount": 1, "perPage": 100 },
+  "totals": { "count": 1, "paymentAmount": 167 }
+}
