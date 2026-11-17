@@ -48,6 +48,11 @@ describe('labelLayout', () => {
     const l = await labelLayout(lbl(full.repeat(6)));
     expect(l).toMatchObject({ size: 4, scale: 55, fits: false });
   });
+  it('a short label has no phantom empty line after a word that fills the width', async () => {
+    const l = await labelLayout(lbl('Аквакилимок\n"Сафарі"\nарт. 0921'));
+    expect(l.textHeight).toBeLessThan(3.5 * l.size * 1.2);
+  });
+
   it('a full label fits at a readable size', async () => {
     const l = await labelLayout(lbl(full));
     expect(l.fits).toBe(true);

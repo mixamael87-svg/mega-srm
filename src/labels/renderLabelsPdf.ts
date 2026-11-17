@@ -58,7 +58,7 @@ export function fitFontSize(text: string, widthPt: number, heightPt: number, mea
   return MIN_SIZE + lo / 4;
 }
 
-type Measure = (text: string, size: number, width: number) => number;
+type Measure = ((text: string, size: number, width: number) => number) & { wordWidth?: (word: string, size: number) => number };
 
 function newDoc(font: Buffer) {
   const doc = new PDFDocument({ size: [PAGE_W, PAGE_H], margin: 0, autoFirstPage: false, info: { Title: 'Наклейки' } });
@@ -66,8 +66,11 @@ function newDoc(font: Buffer) {
   doc.font('label');
   return doc;
 }
-const measurer = (doc: PDFKit.PDFDocument): Measure => (text, size, width) =>
-  text ? doc.fontSize(size).heightOfString(text, { width, lineGap: 0 }) : 0;
+const measurer = (doc: PDFKit.PDFDocument): Measure => {
+  const m: Measure = (text, size, width) => (text ? doc.fontSize(size).heightOfString(text, { width, lineGap: 0 }) : 0);
+  m.wordWidth = (word, size) => doc.fontSize(size).widthOfString(word);
+  return m;
+};
 
 /** Height-measuring function for text set in the label font (no condensing). */
 export async function textMeasure(): Promise<Measure> {
@@ -95,6 +98,11 @@ function layout(c: LabelContent, m: Measure): Layout {
   const { head, body } = splitHead(c);
   const a = area(c);
   const headW = c.align === 'center' ? TEXT_WIDTH_PT - 2 * (MARK + 1) : TEXT_WIDTH_PT - (MARK + 1);
+  // pdfkit measures a line-ending word together with its "\n" glyph, and a word that then overflows gets a
+  // phantom empty line after it: every word plus that glyph must fit the width
+  const words = c.text.split(/[ \t]+|(?<=\n)/).filter(w => w.trim());
+  const wordsFit = (size: number, scale: number) =>
+    !m.wordWidth || words.every(w => m.wordWidth!(w.endsWith('\n') ? w : w + '\n', size) * scale / 100 <= TEXT_WIDTH_PT - 1);
   const heights = (size: number, scale: number) => {
     const k = 100 / scale; // wrap in a wider box, draw squeezed horizontally
     const headH = c.showMark ? Math.max(m(head, size, headW * k), MARK) : 0;
@@ -104,7 +112,7 @@ function layout(c: LabelContent, m: Measure): Layout {
   // if nothing fits at all — smallest size, strongest condensing (the text is clipped to its area)
   let best: { size: number; scale: number } | undefined;
   for (const scale of SCALES) {
-    const size = fitFontSize(c.text, TEXT_WIDTH_PT, a.h, s => { const h = heights(s, scale); return h.headH + h.bodyH; });
+    const size = fitFontSize(c.text, TEXT_WIDTH_PT, a.h, s => { const h = heights(s, scale); return wordsFit(s, scale) ? h.headH + h.bodyH : Infinity; });
     const h = heights(size, scale);
     if (h.headH + h.bodyH > a.h) continue;
     if (!best || size > best.size) best = { size, scale };
@@ -115,9 +123,9 @@ function layout(c: LabelContent, m: Measure): Layout {
 }
 
 /** Chosen font size and condensing; `fits` = false when the text overflows even at 4 pt and 55 %. */
-export async function labelLayout(c: LabelContent): Promise<{ size: number; scale: number; fits: boolean }> {
+export async function labelLayout(c: LabelContent): Promise<{ size: number; scale: number; fits: boolean; textHeight: number }> {
   const l = layout(c, await textMeasure());
-  return { size: l.size, scale: l.scale, fits: l.headH + l.bodyH <= l.area.h + 0.01 };
+  return { size: l.size, scale: l.scale, fits: l.headH + l.bodyH <= l.area.h + 0.01, textHeight: l.headH + l.bodyH };
 }
 
 /** False when the text overflows its area even at the smallest size and the strongest condensing. */
