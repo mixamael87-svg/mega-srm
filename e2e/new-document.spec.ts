@@ -58,4 +58,27 @@ test('login → order 54969 → split Ніблер (Мікс) 6/6/6/6 → naklad
   await page.getByRole('link', { name: 'Історія' }).click();
   await expect(page.getByRole('cell', { name: 'Демо — ФОП Демо Клієнт' })).toBeVisible();
   await expect(page.getByRole('cell', { name: '54969' }).first()).toBeVisible();
+
+  // labels from the nakladna: one label for sku 0102 (qty 3 in the demo order), the rest are reported as missing
+  const sets = await (await page.request.get('/api/label-sets')).json();
+  const zag = sets.find((x: { name: string }) => x.name === 'Загальна');
+  const created = await page.request.post(`/api/label-sets/${zag.id}/labels`, { data: { sku: '0102', text: 'Товар демо\nАрт. 0102' } });
+  expect(`${created.status()} ${await created.text()}`).toMatch(/^201 /);
+  await page.reload();
+  const nakladna = page.getByRole('row').filter({ hasText: 'Накладна' }).first();
+  await expect(nakladna.getByRole('button', { name: 'Наклейки: Загальна' })).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: 'Рахунок' }).getByRole('button', { name: /^Наклейки:/ })).toHaveCount(0);
+  await nakladna.getByRole('button', { name: 'Наклейки: Загальна' }).click();
+  const dlg = page.getByRole('dialog');
+  await expect(dlg).toContainText('Буде надруковано 3 наклейки');
+  await expect(dlg).toContainText('Немає наклейки');
+  await expect(dlg.getByRole('cell', { name: '0103', exact: true })).toBeVisible();
+  const [pdf] = await Promise.all([
+    page.context().waitForEvent('response', r => /\/api\/documents\/\d+\/labels\?set=\d+&format=pdf$/.test(r.url())),
+    dlg.getByRole('button', { name: 'Друкувати' }).click(),
+  ]);
+  expect(pdf.status()).toBe(200);
+  expect(pdf.headers()['content-type']).toBe('application/pdf');
+  await dlg.getByRole('button', { name: 'Закрити' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });

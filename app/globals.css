@@ -27,3 +27,9 @@ tr.mix > td { background: var(--mix); }
 .pill.annulled { background:#f6d9d1; color:var(--warn); }
 .login { max-width:340px; margin:12vh auto; }
 .login input { width:100%; margin-bottom:12px; }
+.overlay { position:fixed; inset:0; background:rgba(0,0,0,.35); display:flex; align-items:flex-start; justify-content:center; padding-top:8vh; z-index:10; }
+.dialog { width:min(640px, 92vw); max-height:84vh; overflow:auto; }
+.tabs { display:flex; gap:4px; margin-bottom:12px; flex-wrap:wrap; }
+.tabs button[aria-selected="true"] { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+.label-preview { width:189px; height:202px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+.pill.warn { background:#f6d9d1; color:var(--warn); }
