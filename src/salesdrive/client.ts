@@ -2,15 +2,15 @@
  * SalesDrive API client (read-only: GET only, never writes to SalesDrive).
  *
  * Endpoints (checked 2026-11-17, https://salesdrive.ua/knowledge/api/):
- *  - GET {baseUrl}/api/order/list/?filter[id]=…&filter[statusId]=__ALL__   orders; limit 10 req/min, 100/h, 1000/day
+ *  - GET {baseUrl}/api/order/list/?filter[id][]=…&filter[statusId]=__ALL__  orders; limit 10 req/min, 100/h, 1000/day
+ *    (checked on the real API 2026-11-17: `filter[id]=` is silently ignored, only the array form `filter[id][]=` works)
  *  - GET {baseUrl}/api/invoice/list/, /api/sales-invoice/list/             documents (carry `organization`, `organizationAccount`)
  *  - Product catalog: there is NO product list API — SalesDrive exposes it as a YML export link
  *    (Установки → Товари/Послуги → Експорт YML, env SALESDRIVE_YML_URL; robots.txt blocks crawlers,
  *    server-side fetch is fine). We read that feed and cache it for 10 minutes.
  *  - There is NO organizations endpoint: organizations are collected from documents; the rest is entered in the app.
  * Auth: docs name the header `Form-Api-Key`; the owner's working integration uses `X-Api-Key` — we send both.
- * `filter[id]` is not in the public docs: getOrder() therefore also matches the id in the response,
- * so an ignored filter yields "not found" instead of a wrong order. Verify with scripts/sd-smoke.ts.
+ * getOrder() also matches the id in the response, so if the filter is ever ignored we get "not found", never a wrong order.
  */
 import type { SdOrder, SdProduct } from '../domain/types';
 import { mapOrder } from './mapOrder';
@@ -76,7 +76,7 @@ export function createSalesDriveClient(cfg: SalesDriveConfig) {
   return {
     async getOrder(id: number): Promise<SdOrder | null> {
       if (!Number.isSafeInteger(id) || id <= 0) return null;
-      const body = await getJson('/api/order/list/', { 'filter[id]': id, 'filter[statusId]': '__ALL__', page: 1, limit: 100 });
+      const body = await getJson('/api/order/list/', { 'filter[id][]': id, 'filter[statusId]': '__ALL__', page: 1, limit: 100 });
       const found = (body.data ?? body.orders ?? []).find((o: any) => Number(o?.id) === id);
       return found ? mapOrder(found) : null;
     },

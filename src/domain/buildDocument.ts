@@ -60,7 +60,10 @@ export function buildDocumentLines(
     }
   });
 
-  const discountKop = toKop(order.discountAmount) + lineDiscountKop;
+  // SalesDrive: order.discountAmount is the total discount and already includes line discounts
+  // (checked on real orders 55083, 55129). Line discounts are used only when the order total is empty.
+  const orderDiscountKop = toKop(order.discountAmount);
+  const discountKop = orderDiscountKop > 0 ? orderDiscountKop : lineDiscountKop;
   const netKop = grossKop - discountKop;
   const expected = toKop(order.paymentAmount);
   if (netKop !== expected) {

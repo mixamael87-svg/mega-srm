@@ -19,7 +19,7 @@ export type SdOrder = {
   contactName: string;
   organizationId: number | null;
   lines: SdOrderLine[];
-  /** Order-level discount, UAH. */
+  /** Total order discount, UAH — already includes line discounts (verified on real orders). */
   discountAmount: number;
   /** Final order sum, UAH. */
   paymentAmount: number;

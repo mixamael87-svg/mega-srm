@@ -103,11 +103,22 @@ describe('buildDocumentLines', () => {
     expect(totals.netKop).toBe(Math.round(paymentAmount * 100));
   });
 
-  it('discount: order + per-unit line discount', () => {
-    const o = order([line({ amount: 2, price: 100, discount: 10 })], { discountAmount: 30, paymentAmount: 150 });
+  // Checked on real SalesDrive orders 2026-11-17: order.discountAmount is the TOTAL discount and already includes line discounts.
+  it('discount: order.discountAmount is the total (real order 55083)', () => {
+    const o = order([line({ amount: 1, price: 182, discount: 17 })], { discountAmount: 17, paymentAmount: 165 });
     const { lines, totals } = buildDocumentLines(o, [], {});
-    expect(lines[0]).toMatchObject({ priceKop: 10000, sumKop: 20000 });
-    expect(totals).toEqual({ grossKop: 20000, discountKop: 5000, netKop: 15000 });
+    expect(lines[0]).toMatchObject({ priceKop: 18200, sumKop: 18200 });
+    expect(totals).toEqual({ grossKop: 18200, discountKop: 1700, netKop: 16500 });
+  });
+
+  it('discount: line discounts inside a bigger order discount (real order 55129 shape)', () => {
+    const o = order([line({ amount: 1, price: 39, discount: 2 }), line({ productId: 2, amount: 1, price: 39 })], { discountAmount: 4, paymentAmount: 74 });
+    expect(buildDocumentLines(o, [], {}).totals).toEqual({ grossKop: 7800, discountKop: 400, netKop: 7400 });
+  });
+
+  it('discount: only line discounts, discountAmount empty → per-unit × qty', () => {
+    const o = order([line({ amount: 2, price: 100, discount: 10 })], { discountAmount: 0, paymentAmount: 180 });
+    expect(buildDocumentLines(o, [], {}).totals).toEqual({ grossKop: 20000, discountKop: 2000, netKop: 18000 });
   });
 
   it('total mismatch', () => {

@@ -33,7 +33,7 @@ describe('getOrder', () => {
     });
     const u = new URL(calls[0]!.url);
     expect(u.pathname).toBe('/api/order/list/');
-    expect(u.searchParams.get('filter[id]')).toBe('55225');
+    expect(u.searchParams.get('filter[id][]')).toBe('55225');
     expect(u.searchParams.get('filter[statusId]')).toBe('__ALL__');
     expect(calls[0]!.headers['x-api-key']).toBe('KEY');
     expect(calls[0]!.headers['form-api-key']).toBe('KEY');
