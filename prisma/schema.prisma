@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  manager
+}
+
+enum DocType {
+  RAHUNOK
+  NAKLADNA
+}
+
+enum DocStatus {
+  ACTIVE
+  ANNULLED
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  login        String   @unique
+  passwordHash String
+  role         Role     @default(manager)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  documents Document[]
+  versions  DocumentVersion[]
+}
+
+/// Наш ФОП (постачальник)
+model OurFop {
+  id               Int     @id @default(autoincrement())
+  sdOrganizationId Int?    @unique
+  name             String
+  /// Многострочные реквизиты для шапки документа
+  requisites       String  @db.Text
+  phone            String  @default("")
+  isDefault        Boolean @default(false)
+
+  counters  InvoiceCounter[]
+  documents Document[]
+}
+
+/// ФОП клиента (одержувач), привязан к контакту SalesDrive
+model ClientFop {
+  id          Int    @id @default(autoincrement())
+  sdContactId Int    @unique
+  name        String
+  requisites  String @db.Text
+
+  documents Document[]
+}
+
+/// Счётчик номеров рахунків: (наш ФОП × год × месяц)
+model InvoiceCounter {
+  fopId Int
+  year  Int
+  month Int
+  last  Int
+
+  fop OurFop @relation(fields: [fopId], references: [id])
+
+  @@id([fopId, year, month])
+}
+
+model Document {
+  id          Int       @id @default(autoincrement())
+  type        DocType
+  number      Int
+  date        DateTime  @db.Date
+  fopId       Int
+  clientFopId Int
+  sdOrderId   Int
+  status      DocStatus @default(ACTIVE)
+  createdById Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  fop       OurFop            @relation(fields: [fopId], references: [id])
+  clientFop ClientFop         @relation(fields: [clientFopId], references: [id])
+  createdBy User              @relation(fields: [createdById], references: [id])
+  versions  DocumentVersion[]
+
+  @@unique([type, sdOrderId])
+  @@index([date])
+}
+
+/// Снимок строк документа (после разбивки «Мікс»); файл пересобирается из последнего снимка
+model DocumentVersion {
+  id          Int      @id @default(autoincrement())
+  documentId  Int
+  linesJson   Json
+  totalsJson  Json
+  headerJson  Json
+  createdAt   DateTime @default(now())
+  createdById Int
+
+  document  Document @relation(fields: [documentId], references: [id])
+  createdBy User     @relation(fields: [createdById], references: [id])
+
+  @@index([documentId])
+}
