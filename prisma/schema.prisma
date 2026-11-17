@@ -138,3 +138,41 @@ model DocumentVersion {
 
   @@index([documentId])
 }
+
+enum LabelAlign {
+  center
+  left
+}
+
+/// Набор наклеек (кнопка «Наклейки: <name>» у накладной)
+model LabelSet {
+  id     Int     @id @default(autoincrement())
+  name   String  @unique
+  sort   Int     @default(0)
+  labels Label[]
+}
+
+/// Наклейка на товар 37,5 × 40 мм
+model Label {
+  id           Int        @id @default(autoincrement())
+  setId        Int
+  /// 4 digits; null for a helper label (e.g. "частина 2")
+  sku          String?
+  title        String     @default("")
+  text         String     @db.Text
+  align        LabelAlign @default(center)
+  showMark     Boolean    @default(false)
+  /// EAN-13 or "" (no barcode)
+  barcode      String     @default("")
+  noPrint      Boolean    @default(false)
+  /// printed right after this label for every unit
+  extraLabelId Int?
+  updatedAt    DateTime   @updatedAt
+
+  set        LabelSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  extraLabel Label?   @relation("Extra", fields: [extraLabelId], references: [id], onDelete: SetNull)
+  extraFor   Label[]  @relation("Extra")
+
+  @@unique([setId, sku])
+  @@index([setId])
+}
