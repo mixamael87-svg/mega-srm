@@ -47,23 +47,26 @@ export async function renderDocument(layout: DocLayout, h: DocHeader, lines: Doc
 
   let r = 0;
   const row = () => ws.getRow(++r);
-  const put = (rowNo: number, col: number, value: string, opts: { bold?: boolean; size?: number; italic?: boolean; align?: ExcelJS.Alignment['horizontal']; wrap?: boolean; toCol?: number; border?: boolean } = {}) => {
+  const put = (rowNo: number, col: number, value: string, opts: { bold?: boolean; size?: number; italic?: boolean; underline?: boolean; align?: ExcelJS.Alignment['horizontal']; wrap?: boolean; toCol?: number; border?: boolean } = {}) => {
     const cell = ws.getCell(rowNo, col);
     cell.value = value;
-    cell.font = { name: FONT, size: opts.size ?? 10, bold: !!opts.bold, italic: !!opts.italic };
+    cell.font = { name: FONT, size: opts.size ?? 10, bold: !!opts.bold, italic: !!opts.italic, ...(opts.underline ? { underline: true } : {}) };
     cell.alignment = { horizontal: opts.align ?? 'left', vertical: 'top', wrapText: opts.wrap ?? false };
     if (opts.toCol && opts.toCol > col) ws.mergeCells(rowNo, col, rowNo, opts.toCol);
     if (opts.border) for (let c = col; c <= (opts.toCol ?? col); c++) ws.getCell(rowNo, c).border = box;
     return cell;
   };
-  const lineCount = (s: string) => Math.max(1, s.split('\n').length);
+  /** Printed lines of a wrapped multi-line text in a cell `width` characters wide. */
+  const wrappedLines = (s: string, width: number) => Math.max(1, s.split('\n').reduce((a, ln) => a + Math.max(1, Math.ceil(ln.length / (width * 1.15))), 0));
+  const valueWidth = cols.slice(2).reduce((a, c) => a + c.width, 0);
 
   // Шапка
-  for (const [label, value] of [['Постачальник:', h.supplier], ['Одержувач:', h.recipient], ['Платник:', h.payer], ['Умова продажу:', '']] as const) {
+  // Labels as in УкрСклад: bold + underlined, no colon (except «Умова продажу:»)
+  for (const [label, value] of [['Постачальник', h.supplier], ['Одержувач', h.recipient], ['Платник', h.payer], ['Умова продажу:', '']] as const) {
     const rw = row();
-    put(r, 1, label, { bold: true, toCol: 2 });
+    put(r, 1, label, { bold: true, underline: true, toCol: 2 });
     put(r, 3, value, { wrap: true, toCol: n });
-    rw.height = 13 * lineCount(value) + 2;
+    rw.height = 13 * wrappedLines(value, valueWidth) + (value.includes('\n') ? 8 : 2); // gap after multi-line blocks, as in УкрСклад
   }
   row();
 
@@ -71,7 +74,7 @@ export async function renderDocument(layout: DocLayout, h: DocHeader, lines: Doc
   row().height = 16;
   put(r, 1, `${layout.title} № ${h.number}`, { bold: true, size: 12, align: 'center', toCol: n });
   row();
-  put(r, 1, `від ${formatDocDate(h.date)}`, { size: 10, align: 'center', toCol: n });
+  put(r, 1, `від ${formatDocDate(h.date)}`, { bold: true, size: 12, align: 'center', toCol: n });
   row();
 
   // Таблица

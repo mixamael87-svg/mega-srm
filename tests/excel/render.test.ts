@@ -73,9 +73,9 @@ describe('renderNakladna', () => {
   });
   it('header block: Постачальник / Одержувач / Платник / Умова продажу', async () => {
     const s = await load(await renderNakladna(header(1, new Date(2026, 0, 1)), lines, totals));
-    expect(right(s, 'Постачальник:')).toContain('ФОП Кузнецов Михайло Володимирович\nтел. 0670000000');
-    expect(right(s, 'Одержувач:')).toContain('ФОП Палій Анна');
-    expect(right(s, 'Платник:')).toBe('той самий');
+    expect(right(s, 'Постачальник')).toContain('ФОП Кузнецов Михайло Володимирович\nтел. 0670000000');
+    expect(right(s, 'Одержувач')).toContain('ФОП Палій Анна');
+    expect(right(s, 'Платник')).toBe('той самий');
     expect(rowOf(s, 'Умова продажу:')).toBeTruthy();
   });
   it('style as УкрСклад №766: Arial 10, boxed totals, bold amount in words', async () => {
@@ -86,6 +86,18 @@ describe('renderNakladna', () => {
     expect(value.text).toBe('39628,55');
     expect(value.border?.top?.style).toBe('thin');
     expect(cellByText(ws, "Тридцять дев'ять тисяч шістсот двадцять вісім гривень 55 копійок")!.font?.bold).toBe(true);
+  });
+  it('header as in УкрСклад: underlined labels without colon, bold date', async () => {
+    const { ws } = await load(await renderRahunok(header(14, new Date(2026, 10, 4)), lines, totals));
+    for (const l of ['Постачальник', 'Одержувач', 'Платник']) expect(cellByText(ws, l)!.font).toMatchObject({ bold: true, underline: true });
+    expect(cellByText(ws, 'Умова продажу:')).toBeTruthy();
+    expect(cellByText(ws, 'від 04 листопада 2026 р.')!.font).toMatchObject({ bold: true, size: 12 });
+  });
+  it('header rows are tall enough for wrapped requisites', async () => {
+    const long = 'ФОП Кастирін Олександр Миколайович\n063 382 31 69\nIBAN UA743052990000026001035903679 в АТ КБ «ПРИВАТБАНК»Харківське ГРУ АТ КБ "ПриватБанк" — дуже довгий рядок\nІПН 3182206732';
+    const { ws } = await load(await renderRahunok({ ...header(14, new Date()), supplier: long }, lines, totals));
+    const row = ws.getRow(Number(cellByText(ws, 'Постачальник')!.row));
+    expect(row.height).toBeGreaterThanOrEqual(13 * 5); // 4 lines + one wrapped
   });
   it('page setup: A4 portrait, fit to width', async () => {
     const { ws } = await load(await renderNakladna(header(1, new Date()), lines, totals));

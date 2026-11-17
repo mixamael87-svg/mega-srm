@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import ExcelJS from 'exceljs';
 import { prisma, resetDb, makeFop } from '../setup/db';
-import { createDocumentService, parseDocDate } from '../../src/services/documents';
+import { createDocumentService, parseDocDate, partyText } from '../../src/services/documents';
 import type { SalesDriveClient } from '../../src/salesdrive/client';
 import type { SdOrder, SdProduct } from '../../src/domain/types';
 
@@ -150,6 +150,10 @@ describe('document service', () => {
     const f = await svc.downloadDocument(a.documentId);
     expect(f.filename).toBe('Рахунок-фактура_1_2026-12-01.xlsx');
     expect(f.file.length).toBeGreaterThan(1000);
+  });
+
+  it('supplier phone is printed as is (no "тел." prefix), as in рахунок №14', () => {
+    expect(partyText('ФОП Кастирін', 'Юр. адреса: Харків\nІПН 1', '063 382 31 69')).toBe('ФОП Кастирін\n063 382 31 69\nЮр. адреса: Харків\nІПН 1');
   });
 
   it('parseDocDate rejects garbage', () => {

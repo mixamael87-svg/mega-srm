@@ -35,7 +35,7 @@ export function filenameFor(type: DocType, number: number, date: Date) {
 export function partyText(name: string, requisites: string, phone = ''): string {
   const rest = requisites.split(/\r?\n/).map(s => s.trimEnd());
   if (rest[0]?.trim() === name.trim()) rest.shift();
-  return [name.trim(), phone.trim() ? `тел. ${phone.trim()}` : '', ...rest].filter(s => s !== '').join('\n');
+  return [name.trim(), phone.trim(), ...rest].filter(s => s !== '').join('\n');
 }
 
 const render = (type: DocType, h: DocHeader, lines: DocLine[], t: DocTotals) => (type === 'RAHUNOK' ? renderRahunok : renderNakladna)(h, lines, t);
