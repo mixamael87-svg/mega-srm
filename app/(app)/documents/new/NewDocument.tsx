@@ -2,10 +2,12 @@
 import { useMemo, useState } from 'react';
 import type { SdOrder, SdProduct } from '@/domain/types';
 import { downloadUrl, uah } from '@/ui/money';
+import { RecipientPicker, type RecipientOption } from '@/ui/RecipientPicker';
 
 type Preview = {
   order: SdOrder;
-  recipient: { name: string; requisites: string } | null;
+  recipients: RecipientOption[];
+  defaultRecipientFopId: number | null;
   mix: { lineIndex: number; colours: SdProduct[] }[];
   fops: { id: number; name: string }[];
   defaultFopId: number | null;
@@ -24,7 +26,7 @@ export function NewDocument() {
   const [fopId, setFopId] = useState<number | null>(null);
   const [date, setDate] = useState('');
   const [splits, setSplits] = useState<Splits>({});
-  const [editRecipient, setEditRecipient] = useState(false);
+  const [recipientId, setRecipientId] = useState<number | null>(null);
 
   async function load(e?: React.FormEvent) {
     e?.preventDefault();
@@ -36,7 +38,7 @@ export function NewDocument() {
     setBusy(false);
     const j = await res.json().catch(() => ({ error: 'Помилка' }));
     if (!res.ok) { setP(null); setError(j.error ?? 'Помилка'); return; }
-    setP(j); setFopId(j.defaultFopId); setDate(j.defaultDate); setSplits({}); setEditRecipient(!j.recipient);
+    setP(j); setFopId(j.defaultFopId); setDate(j.defaultDate); setSplits({}); setRecipientId(j.defaultRecipientFopId);
   }
 
   const mixByLine = useMemo(() => new Map(p?.mix.map(m => [m.lineIndex, m.colours]) ?? []), [p]);
@@ -49,7 +51,7 @@ export function NewDocument() {
   };
   const splitErrors = Object.keys(splits).map(Number).filter(i => !splitState(i)?.ok);
   const blockers = [
-    !p?.recipient && 'Введіть реквізити одержувача',
+    !recipientId && 'Оберіть одержувача',
     !fopId && 'Оберіть постачальника',
     !date && 'Вкажіть дату',
     splitErrors.length > 0 && `Розбивка не збігається з кількістю (рядок ${splitErrors.map(i => i + 1).join(', ')})`,
@@ -59,7 +61,7 @@ export function NewDocument() {
     if (!p || !fopId) return;
     setError(''); setInfo(''); setBusy(true);
     const body = {
-      type, sdOrderId: p.order.id, fopId, date,
+      type, sdOrderId: p.order.id, fopId, recipientFopId: recipientId, date,
       splits: Object.entries(splits).map(([i, parts]) => ({
         lineIndex: Number(i),
         parts: Object.entries(parts).map(([variantId, q]) => ({ variantId, qty: Number(q.replace(',', '.')) || 0 })).filter(x => x.qty > 0),
@@ -69,22 +71,12 @@ export function NewDocument() {
     setBusy(false);
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
-      if (j.code === 'RECIPIENT_REQUISITES_MISSING') setEditRecipient(true);
       setError(j.issues?.[0]?.message ?? j.error ?? 'Помилка');
       return;
     }
     const r = await res.json();
     downloadUrl(`/api/documents/${r.documentId}/file`);
     setInfo(`Сформовано: ${r.filename}`);
-  }
-
-  async function saveRecipient(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const f = new FormData(e.currentTarget);
-    const res = await fetch('/api/client-fops', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sdContactId: p!.order.contactId, name: f.get('name'), requisites: f.get('requisites') }) });
-    const j = await res.json();
-    if (!res.ok) { setError(j.issues?.[0]?.message ?? j.error); return; }
-    setP({ ...p!, recipient: j }); setEditRecipient(false); setError('');
   }
 
   const setQty = (i: number, id: string, v: string) => setSplits(s => ({ ...s, [i]: { ...s[i], [id]: v } }));
@@ -120,20 +112,12 @@ export function NewDocument() {
             </div>
             <div className="card" style={{ flex: 1, minWidth: 280 }}>
               <h2>Одержувач</h2>
-              {p.recipient && !editRecipient ? (
-                <>
-                  <div style={{ whiteSpace: 'pre-line' }}><b>{p.recipient.name}</b>{'\n'}{p.recipient.requisites}</div>
-                  <button style={{ marginTop: 8 }} onClick={() => setEditRecipient(true)}>Змінити</button>
-                </>
-              ) : (
-                <form onSubmit={saveRecipient}>
-                  <label htmlFor="rname">Назва (напр. ФОП Прізвище Ім'я По батькові)</label>
-                  <input id="rname" name="name" defaultValue={p.recipient?.name ?? ''} style={{ width: '100%', marginBottom: 8 }} required />
-                  <label htmlFor="rreq">Реквізити (адреса, IBAN і банк, ІПН — кожне з нового рядка)</label>
-                  <textarea id="rreq" name="requisites" defaultValue={p.recipient?.requisites ?? ''} required />
-                  <button className="primary" style={{ marginTop: 8 }}>Зберегти реквізити</button>
-                </form>
-              )}
+              <RecipientPicker
+                options={p.recipients}
+                value={recipientId}
+                onChange={setRecipientId}
+                onCreated={o => { setP({ ...p, recipients: [...p.recipients, o] }); setRecipientId(o.id); }}
+              />
             </div>
           </div>
 

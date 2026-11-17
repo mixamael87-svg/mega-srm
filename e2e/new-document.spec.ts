@@ -22,12 +22,15 @@ test('login → order 54969 → split Ніблер (Мікс) 6/6/6/6 → naklad
   await page.getByRole('button', { name: 'Завантажити' }).click();
   await expect(page.getByText('Замовлення № 54969')).toBeVisible();
 
-  // recipient has no requisites yet → buttons blocked, form shown
+  // no recipient chosen yet → buttons blocked; add a new client right from the document screen
   await expect(page.getByRole('button', { name: 'Видаткова накладна (.xlsx)' })).toBeDisabled();
-  await page.getByLabel(/^Назва/).fill('ФОП Демо Клієнт');
-  await page.getByLabel(/^Реквізити/).fill('Юр. адреса: м. Полтава\nІПН 1111111111');
-  await page.getByRole('button', { name: 'Зберегти реквізити' }).click();
-  await expect(page.getByText('ФОП Демо Клієнт')).toBeVisible();
+  await expect(page.getByText('Оберіть одержувача')).toBeVisible();
+  await page.getByRole('button', { name: '+ Новий клієнт / ФОП' }).click();
+  await page.getByLabel('Назва нового клієнта').fill('Демо');
+  await page.getByLabel('Назва ФОП').fill('ФОП Демо Клієнт');
+  await page.getByLabel(/^Реквізити ФОП/).fill('Юр. адреса: м. Полтава\nІПН 1111111111');
+  await page.getByRole('button', { name: 'Зберегти і обрати' }).click();
+  await expect(page.getByText('ІПН 1111111111')).toBeVisible();
 
   await page.getByRole('button', { name: 'Розбити по кольорах' }).click();
   for (const c of ['рожевий', 'блакитний', 'зелений']) await page.getByLabel(`К-ть Ніблер (${c})`).fill('6');
@@ -48,7 +51,11 @@ test('login → order 54969 → split Ніблер (Мікс) 6/6/6/6 → naklad
   wb.worksheets[0]!.eachRow(r => { if (/^\d+$/.test(String(r.getCell(1).text)) && String(r.getCell(2).text) !== '') products++; });
   expect(products).toBe(71);
 
+  // the choice is remembered for this SalesDrive contact
+  await page.getByRole('button', { name: 'Завантажити' }).click();
+  await expect(page.getByLabel('Одержувач')).toHaveValue('Демо — ФОП Демо Клієнт (ІПН 1111111111)');
+
   await page.getByRole('link', { name: 'Історія' }).click();
-  await expect(page.getByRole('cell', { name: 'ФОП Демо Клієнт' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Демо — ФОП Демо Клієнт' })).toBeVisible();
   await expect(page.getByRole('cell', { name: '54969' }).first()).toBeVisible();
 });
