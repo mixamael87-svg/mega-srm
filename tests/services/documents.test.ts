@@ -71,6 +71,20 @@ describe('document service', () => {
     expect((await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54970 })).number).toBe(2);
   });
 
+  it('rahunok regeneration cannot move its number to another FOP or month (would duplicate numbers)', async () => {
+    const other = (await makeFop('ФОП Кастирін')).id;
+    await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54969 });
+    await expect(svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54969, fopId: other })).rejects.toMatchObject({ code: 'RAHUNOK_LOCKED', status: 409 });
+    await expect(svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54969, date: parseDocDate('2026-12-01') })).rejects.toMatchObject({ code: 'RAHUNOK_LOCKED' });
+    // same month, other day — allowed, number kept
+    expect((await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54969, date: parseDocDate('2026-11-30') })).number).toBe(1);
+    // the other FOP's own counter still starts at 1 without clashing
+    expect((await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54970, fopId: other })).number).toBe(1);
+    // nakladna may change supplier freely (its number is the order id)
+    await svc.generateDocument({ ...base, type: 'NAKLADNA', sdOrderId: 54969 });
+    expect((await svc.generateDocument({ ...base, type: 'NAKLADNA', sdOrderId: 54969, fopId: other })).number).toBe(54969);
+  });
+
   it('missing recipient requisites → RECIPIENT_REQUISITES_MISSING', async () => {
     await expect(svc.generateDocument({ ...base, type: 'NAKLADNA', sdOrderId: 54971 })).rejects.toMatchObject({ code: 'RECIPIENT_REQUISITES_MISSING' });
   });

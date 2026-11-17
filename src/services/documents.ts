@@ -70,6 +70,14 @@ export function createDocumentService(deps: { prisma: PrismaClient; sd: SalesDri
     const { doc } = await prisma.$transaction(async tx => {
       const existing = await tx.document.findUnique({ where: { type_sdOrderId: { type: input.type, sdOrderId: input.sdOrderId } } });
       if (existing?.status === 'ANNULLED') throw new HttpError(409, `Документ № ${existing.number} анульовано`, 'DOCUMENT_ANNULLED');
+      if (existing && input.type === 'RAHUNOK') {
+        // The number belongs to the (FOP × month) counter it came from; moving it would duplicate numbers.
+        const was = fromDb(existing.date);
+        const sameMonth = was.getFullYear() === input.date.getFullYear() && was.getMonth() === input.date.getMonth();
+        if (existing.fopId !== fop.id || !sameMonth) {
+          throw new HttpError(409, `Рахунок № ${existing.number} вже сформовано від іншого ФОП або за інший місяць. Номер належить лічильнику цього ФОП за цей місяць, тому змінити постачальника чи місяць для виданого рахунку не можна.`, 'RAHUNOK_LOCKED');
+        }
+      }
       const doc = existing
         ? await tx.document.update({ where: { id: existing.id }, data: { fopId: fop.id, clientFopId: client.id, date: toDb(input.date) } })
         : await tx.document.create({
