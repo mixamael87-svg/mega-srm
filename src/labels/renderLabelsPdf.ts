@@ -80,9 +80,10 @@ const measurer = (doc: PDFKit.PDFDocument): Measure => {
   return m;
 };
 
-/** Height-measuring function for text set in the label font (no condensing). */
+let sharedMeasure: Promise<Measure> | undefined;
+/** Height-measuring function for text set in the label font (no condensing); one parsed font for the process. */
 export async function textMeasure(): Promise<Measure> {
-  return measurer(newDoc((await loadAssets()).font));
+  return (sharedMeasure ??= loadAssets().then(a => measurer(newDoc(a.font))));
 }
 
 /** With the mark, the title lines (up to the "арт. NNNN" line) sit in a narrower band beside it. */
@@ -102,7 +103,19 @@ function area(c: LabelContent) {
   return { top, h: bottom - top };
 }
 
+const layoutCache = new Map<string, Layout>();
+/** Layouts are pure in (content, font): cache them, bounded. */
 function layout(c: LabelContent, m: Measure): Layout {
+  const key = JSON.stringify([c.text, c.align, c.showMark, !!c.barcode]);
+  const hit = layoutCache.get(key);
+  if (hit) return hit;
+  const l = computeLayout(c, m);
+  if (layoutCache.size >= 2000) layoutCache.delete(layoutCache.keys().next().value!);
+  layoutCache.set(key, l);
+  return l;
+}
+
+function computeLayout(c: LabelContent, m: Measure): Layout {
   const { head, body } = splitHead(c);
   const a = area(c);
   const headW = c.align === 'center' ? TEXT_WIDTH_PT - 2 * (MARK + 1) : TEXT_WIDTH_PT - (MARK + 1);

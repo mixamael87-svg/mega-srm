@@ -60,6 +60,15 @@ describe('labelLayout', () => {
   });
 });
 
+describe('labelFits speed', () => {
+  it('checks 150 different full labels in well under a second each batch', async () => {
+    await labelFits(lbl(full)); // warm-up: font loading
+    const t = Date.now();
+    for (let i = 0; i < 150; i++) await labelFits(lbl(`${full} ${i}`));
+    expect(Date.now() - t).toBeLessThan(2500);
+  });
+});
+
 describe('renderLabelsPdf', () => {
   it('one 37.5 × 40 mm page per label', async () => {
     const pdf = await renderLabelsPdf([lbl(full, '4826077002053', true), lbl(short, '4826077009045'), { text: 'Частина 2', align: 'left', showMark: false, barcode: '' }]);
