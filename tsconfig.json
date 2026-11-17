@@ -17,6 +17,6 @@
     "plugins": [{ "name": "next" }],
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["next-env.d.ts", "src", "app", "tests", "scripts", "vitest.config.ts", ".next/types/**/*.ts"],
+  "include": ["next-env.d.ts", "e2e", "playwright.config.ts", "src", "app", "tests", "scripts", "vitest.config.ts", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]
 }
