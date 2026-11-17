@@ -100,22 +100,29 @@ function layout(c: LabelContent, m: Measure): Layout {
     const headH = c.showMark ? Math.max(m(head, size, headW * k), MARK) : 0;
     return { headH, bodyH: m(body, size, TEXT_WIDTH_PT * k) };
   };
+  // first condensing that gives a readable size wins; otherwise the largest size that fits;
+  // if nothing fits at all — smallest size, strongest condensing (the text is clipped to its area)
   let best: { size: number; scale: number } | undefined;
   for (const scale of SCALES) {
     const size = fitFontSize(c.text, TEXT_WIDTH_PT, a.h, s => { const h = heights(s, scale); return h.headH + h.bodyH; });
     const h = heights(size, scale);
-    const fits = h.headH + h.bodyH <= a.h;
-    if (!best || (fits && size > best.size)) best = { size, scale };
-    if (fits && size >= READABLE) { best = { size, scale }; break; }
+    if (h.headH + h.bodyH > a.h) continue;
+    if (!best || size > best.size) best = { size, scale };
+    if (size >= READABLE) break;
   }
-  const { size, scale } = best!;
+  const { size, scale } = best ?? { size: MIN_SIZE, scale: SCALES[SCALES.length - 1]! };
   return { size, scale, head, body, headW, ...heights(size, scale), area: a };
+}
+
+/** Chosen font size and condensing; `fits` = false when the text overflows even at 4 pt and 55 %. */
+export async function labelLayout(c: LabelContent): Promise<{ size: number; scale: number; fits: boolean }> {
+  const l = layout(c, await textMeasure());
+  return { size: l.size, scale: l.scale, fits: l.headH + l.bodyH <= l.area.h + 0.01 };
 }
 
 /** False when the text overflows its area even at the smallest size and the strongest condensing. */
 export async function labelFits(c: LabelContent): Promise<boolean> {
-  const l = layout(c, await textMeasure());
-  return l.headH + l.bodyH <= l.area.h + 0.01;
+  return (await labelLayout(c)).fits;
 }
 
 // ---------- rendering ----------
@@ -134,6 +141,8 @@ export async function renderLabelsPdf(pages: LabelContent[]): Promise<Buffer> {
     const l = layout(c, m);
     const used = Math.min(l.headH + l.bodyH, l.area.h);
     let y = l.area.top + (l.area.h - used) / 2;
+    doc.save();
+    doc.rect(0, l.area.top, PAGE_W, l.area.h).clip(); // overflowing text never reaches the barcode
     if (c.showMark) {
       const x = c.align === 'center' ? MARGIN + MARK + 1 : MARGIN;
       const hh = m(l.head, l.size, l.headW * 100 / l.scale);
@@ -142,6 +151,7 @@ export async function renderLabelsPdf(pages: LabelContent[]): Promise<Buffer> {
       y += l.headH;
     }
     drawText(doc, l.body, MARGIN, y, TEXT_WIDTH_PT, l.size, l.scale, c.align);
+    doc.restore();
     if (c.barcode) drawBarcode(doc, c.barcode);
   }
   doc.end();

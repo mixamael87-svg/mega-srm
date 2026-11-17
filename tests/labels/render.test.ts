@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { ean13Modules, fitFontSize, labelFits, renderLabelsPdf, textMeasure, TEXT_WIDTH_PT } from '../../src/labels/renderLabelsPdf';
+import { ean13Modules, fitFontSize, labelFits, labelLayout, renderLabelsPdf, textMeasure, TEXT_WIDTH_PT } from '../../src/labels/renderLabelsPdf';
 import type { LabelContent } from '../../src/domain/labels';
 
 const full = readFileSync(new URL('../fixtures/labels/0205.txt', import.meta.url), 'utf8').trim();
@@ -40,6 +40,18 @@ describe('fitFontSize', () => {
     expect(fitFontSize(huge, TEXT_WIDTH_PT, 70, size => m(huge, size, TEXT_WIDTH_PT))).toBe(4);
     expect(await labelFits(lbl(huge))).toBe(false);
     expect(await labelFits(lbl(full, '4826077002053', true))).toBe(true);
+  });
+});
+
+describe('labelLayout', () => {
+  it('text that never fits gets the smallest size and the strongest condensing, and is clipped', async () => {
+    const l = await labelLayout(lbl(full.repeat(6)));
+    expect(l).toMatchObject({ size: 4, scale: 55, fits: false });
+  });
+  it('a full label fits at a readable size', async () => {
+    const l = await labelLayout(lbl(full));
+    expect(l.fits).toBe(true);
+    expect(l.size).toBeGreaterThanOrEqual(5);
   });
 });
 
