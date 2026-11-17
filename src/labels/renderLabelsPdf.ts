@@ -2,6 +2,8 @@ import PDFDocument from 'pdfkit';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { LabelContent } from '../domain/labels';
+import { isValidEan13 } from '../domain/barcode';
+export { isValidEan13 };
 
 const MM = 72 / 25.4;
 export const PAGE_W = 37.5 * MM; // 106.30 pt
@@ -30,13 +32,6 @@ const L = ['0001101', '0011001', '0010011', '0111101', '0100011', '0110001', '01
 const G = L.map(c => [...c].map(b => (b === '0' ? '1' : '0')).reverse().join(''));
 const R = L.map(c => [...c].map(b => (b === '0' ? '1' : '0')).join(''));
 const PARITY = ['LLLLLL', 'LLGLGG', 'LLGGLG', 'LLGGGL', 'LGLLGG', 'LGGLLG', 'LGGGLL', 'LGLGLG', 'LGLGGL', 'LGGLGL'];
-
-export function isValidEan13(code: string): boolean {
-  if (!/^\d{13}$/.test(code)) return false;
-  let sum = 0;
-  for (let i = 0; i < 12; i++) sum += Number(code[i]) * (i % 2 === 0 ? 1 : 3);
-  return (10 - (sum % 10)) % 10 === Number(code[12]);
-}
 
 /** 95 modules ('1' = bar) of an EAN-13 code; throws on an invalid code. */
 export function ean13Modules(code: string): string {

@@ -24,3 +24,12 @@ export const xlsxResponse = (file: Buffer, filename: string) =>
       'x-filename': encodeURIComponent(filename),
     },
   });
+
+export const pdfResponse = (file: Buffer, filename: string, inline = true) =>
+  new Response(new Uint8Array(file), {
+    headers: {
+      'content-type': 'application/pdf',
+      'content-disposition': `${inline ? 'inline' : 'attachment'}; filename="${asciiFilename(filename)}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      'cache-control': 'no-store',
+    },
+  });
