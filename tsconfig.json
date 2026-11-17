@@ -9,9 +9,8 @@
     "skipLibCheck": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
-    "types": [],
-    "baseUrl": ".",
-    "paths": { "@/*": ["src/*"] }
+    "types": ["node"],
+    "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src", "tests", "scripts"]
 }
