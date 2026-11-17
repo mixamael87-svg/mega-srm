@@ -104,7 +104,7 @@ export function NewDocument() {
           <div className="card">
             <h2>Замовлення № {p.order.id} · {p.order.contactName} · {p.order.orderTime.slice(0, 10)}</h2>
             {p.documents.length > 0 && (
-              <div className="muted">Вже сформовано: {p.documents.map(d => `${d.type === 'RAHUNOK' ? 'Рахунок' : 'Накладна'} № ${d.number}${d.status === 'ANNULLED' ? ' (анульовано)' : ''}`).join(', ')}. Повторне формування збереже номер.</div>
+              <div className="muted">Вже сформовано: {p.documents.map(d => `${d.type === 'RAHUNOK' ? 'Рахунок' : 'Накладна'} № ${d.number}${d.status === 'ANNULLED' ? ' (анульовано)' : ''}`).join(', ')}. Повторне формування активного документа збереже номер; після анулювання рахунок отримає новий номер.</div>
             )}
           </div>
 

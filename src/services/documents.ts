@@ -68,8 +68,9 @@ export function createDocumentService(deps: { prisma: PrismaClient; sd: SalesDri
     };
 
     const { doc } = await prisma.$transaction(async tx => {
-      const existing = await tx.document.findUnique({ where: { type_sdOrderId: { type: input.type, sdOrderId: input.sdOrderId } } });
-      if (existing?.status === 'ANNULLED') throw new HttpError(409, `Документ № ${existing.number} анульовано`, 'DOCUMENT_ANNULLED');
+      // Only an ACTIVE document is regenerated; after «Анулювати» a new one is issued
+      // (rahunok: next number of the counter; nakladna: the order id again). Annulled numbers stay taken.
+      const existing = await tx.document.findFirst({ where: { type: input.type, sdOrderId: input.sdOrderId, status: 'ACTIVE' } });
       if (existing && input.type === 'RAHUNOK') {
         // The number belongs to the (FOP × month) counter it came from; moving it would duplicate numbers.
         const was = fromDb(existing.date);
@@ -102,7 +103,8 @@ export function createDocumentService(deps: { prisma: PrismaClient; sd: SalesDri
       try {
         return await generateOnce(input);
       } catch (e) {
-        // Two managers created the same document at once: the loser's counter increment rolled back; retry finds the winner.
+        // Two managers created the same document at once: the partial unique index rejects the loser,
+        // its counter increment rolls back, and the retry regenerates the winner's document.
         if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') return generateOnce(input);
         throw e;
       }
@@ -121,6 +123,7 @@ export function createDocumentService(deps: { prisma: PrismaClient; sd: SalesDri
     async annulDocument(id: number, _userId: number): Promise<void> {
       const doc = await prisma.document.findUnique({ where: { id } });
       if (!doc) throw new HttpError(404, 'Документ не знайдено');
+      if (doc.status === 'ANNULLED') throw new HttpError(409, `Документ № ${doc.number} вже анульовано`, 'DOCUMENT_ANNULLED');
       await prisma.document.update({ where: { id }, data: { status: 'ANNULLED' } });
     },
 

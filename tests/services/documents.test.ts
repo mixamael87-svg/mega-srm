@@ -93,11 +93,46 @@ describe('document service', () => {
     await expect(svc.generateDocument({ ...base, type: 'NAKLADNA', sdOrderId: 1 })).rejects.toMatchObject({ code: 'ORDER_NOT_FOUND', status: 404 });
   });
 
-  it('annulled document cannot be regenerated; its number stays taken', async () => {
+  it('annulled rahunok can be re-issued with a NEW number; the old number stays taken', async () => {
+    const a = await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54969 });
+    expect(a.number).toBe(1);
+    await svc.annulDocument(a.documentId, userId);
+    const b = await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54969 });
+    expect(b.number).toBe(2);
+    expect(b.documentId).not.toBe(a.documentId);
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: a.documentId } })).status).toBe('ANNULLED');
+    // regenerating the re-issued one keeps its number
+    expect((await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54969 })).number).toBe(2);
+    expect((await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54970 })).number).toBe(3);
+    const hist = await svc.listDocuments();
+    expect(hist.filter(h => h.sdOrderId === 54969 && h.type === 'RAHUNOK').map(h => [h.number, h.status]).sort()).toEqual([[1, 'ANNULLED'], [2, 'ACTIVE']]);
+  });
+
+  it('annulled nakladna can be re-issued (number = order id again); annulled RAHUNOK may move to another FOP', async () => {
+    const a = await svc.generateDocument({ ...base, type: 'NAKLADNA', sdOrderId: 54969 });
+    await svc.annulDocument(a.documentId, userId);
+    const b = await svc.generateDocument({ ...base, type: 'NAKLADNA', sdOrderId: 54969 });
+    expect(b.number).toBe(54969);
+    expect(b.documentId).not.toBe(a.documentId);
+    const other = (await makeFop('ФОП Кастирін')).id;
+    const r = await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54970 });
+    await svc.annulDocument(r.documentId, userId);
+    expect((await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54970, fopId: other })).number).toBe(1);
+  });
+
+  it('annulling twice is rejected', async () => {
     const a = await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54969 });
     await svc.annulDocument(a.documentId, userId);
-    await expect(svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54969 })).rejects.toMatchObject({ code: 'DOCUMENT_ANNULLED' });
-    expect((await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54970 })).number).toBe(2);
+    await expect(svc.annulDocument(a.documentId, userId)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('concurrent re-issue after annul → still a single active document', async () => {
+    const a = await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54969 });
+    await svc.annulDocument(a.documentId, userId);
+    const rs = await Promise.all([1, 2, 3].map(() => svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54969 })));
+    expect(new Set(rs.map(r => r.number))).toEqual(new Set([2]));
+    expect(await prisma.document.count({ where: { sdOrderId: 54969, type: 'RAHUNOK', status: 'ACTIVE' } })).toBe(1);
+    expect((await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54970 })).number).toBe(3);
   });
 
   it('DocumentBuildError propagates with its code', async () => {

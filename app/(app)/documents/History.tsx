@@ -16,7 +16,7 @@ export function History({ isAdmin }: { isAdmin: boolean }) {
 
   const download = (id: number) => downloadUrl(`/api/documents/${id}/file`);
   async function annul(r: Row) {
-    if (!confirm(`Анулювати ${r.type === 'RAHUNOK' ? 'рахунок' : 'накладну'} № ${r.number}? Номер залишиться зайнятим.`)) return;
+    if (!confirm(`Анулювати ${r.type === 'RAHUNOK' ? 'рахунок' : 'накладну'} № ${r.number}? Номер залишиться зайнятим; для замовлення можна буде сформувати новий документ${r.type === 'RAHUNOK' ? ' з наступним номером' : ''}.`)) return;
     const res = await fetch(`/api/documents/${r.id}/annul`, { method: 'POST' });
     if (res.ok) await load(); else setError((await res.json()).error);
   }

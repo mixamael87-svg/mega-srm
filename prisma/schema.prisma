@@ -88,7 +88,10 @@ model Document {
   createdBy User              @relation(fields: [createdById], references: [id])
   versions  DocumentVersion[]
 
-  @@unique([type, sdOrderId])
+  /// At most one ACTIVE document per (type, order): partial unique index "Document_active_type_order"
+  /// is created by raw SQL in migration 2026…_reissue_after_annul (Prisma 6 can't express partial indexes).
+  /// ⚠ If a future `prisma migrate dev` proposes `DROP INDEX "Document_active_type_order"`, remove that line from the migration.
+  @@index([type, sdOrderId])
   @@index([date])
 }
 
