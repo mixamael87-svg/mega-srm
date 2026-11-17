@@ -23,6 +23,8 @@ COPY --from=build /app/.next/static ./.next/static
 # Full production node_modules: standalone file tracing can miss files of exceljs' dependencies
 COPY --from=deps /app/node_modules ./node_modules
 COPY prisma ./prisma
+# Label font and conformity mark (read at runtime by src/labels/renderLabelsPdf.ts)
+COPY assets ./assets
 COPY scripts/create-admin.mjs scripts/bootstrap-admin.mjs ./scripts/
 USER node
 EXPOSE 3000
