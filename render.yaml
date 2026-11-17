@@ -1,0 +1,28 @@
+# Render Blueprint: New → Blueprint → this repo. Free web service in Frankfurt, built from the Dockerfile.
+# The database is external (Neon Free) — paste its direct connection string into DATABASE_URL.
+services:
+  - type: web
+    name: mega-srm
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /login
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL          # Neon → Connect → Connection pooling OFF → copy postgresql://…
+        sync: false
+      - key: SALESDRIVE_API_KEY
+        sync: false
+      - key: SALESDRIVE_YML_URL
+        sync: false
+      - key: ADMIN_LOGIN           # first admin, created on start only if the DB has no users
+        sync: false
+      - key: ADMIN_PASSWORD        # >= 8 chars; remove both after the first login
+        sync: false
+      - key: SALESDRIVE_BASE_URL
+        value: https://megazayka.salesdrive.me
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: TZ
+        value: Europe/Kyiv

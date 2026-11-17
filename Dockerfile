@@ -23,7 +23,7 @@ COPY --from=build /app/.next/static ./.next/static
 # Full production node_modules: standalone file tracing can miss files of exceljs' dependencies
 COPY --from=deps /app/node_modules ./node_modules
 COPY prisma ./prisma
-COPY scripts/create-admin.mjs ./scripts/create-admin.mjs
+COPY scripts/create-admin.mjs scripts/bootstrap-admin.mjs ./scripts/
 USER node
 EXPOSE 3000
-CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node scripts/bootstrap-admin.mjs && node server.js"]

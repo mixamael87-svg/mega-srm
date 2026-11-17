@@ -53,6 +53,13 @@ docker run -p 3000:3000 --env-file .env mega-srm   # миграции приме
 docker exec -it <container> node scripts/create-admin.mjs admin 'пароль'
 ```
 
+**Render (бесплатно) + Neon (бесплатная база)** — основной вариант:
+1. neon.com → проект в регионе Frankfurt → Connect → **Connection pooling выключить** → скопировать строку `postgresql://…`.
+2. render.com (вход через GitHub) → **New → Blueprint** → репозиторий `mega-srm` (файл `render.yaml`).
+3. Заполнить секреты: `DATABASE_URL` (строка Neon), `SALESDRIVE_API_KEY`, `SALESDRIVE_YML_URL`, `ADMIN_LOGIN`, `ADMIN_PASSWORD` → Apply.
+4. При старте контейнер сам применяет миграции и создаёт первого админа (только если пользователей ещё нет). После первого входа `ADMIN_PASSWORD` можно удалить.
+Бесплатный сервис засыпает после 15 минут без запросов и просыпается примерно за минуту; за $7/мес (Starter) не засыпает.
+
 **Railway** (≈ $5–10/мес): New Project → Deploy from GitHub repo `mega-srm` (Dockerfile подхватится сам) → Add PostgreSQL → в Variables сервиса задать `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `SESSION_SECRET`, `SALESDRIVE_*`, `TZ=Europe/Kyiv` → Deploy. Первого админа создать через Railway Shell: `node scripts/create-admin.mjs admin 'пароль'`.
 
 **Render**: New → Web Service из репозитория (Docker) + New → PostgreSQL; переменные те же.
