@@ -5,7 +5,8 @@
  *  - GET {baseUrl}/api/order/list/?filter[id]=…&filter[statusId]=__ALL__   orders; limit 10 req/min, 100/h, 1000/day
  *  - GET {baseUrl}/api/invoice/list/, /api/sales-invoice/list/             documents (carry `organization`, `organizationAccount`)
  *  - Product catalog: there is NO product list API — SalesDrive exposes it as a YML export link
- *    (Установки → Товари/Послуги → Експорт YML). We read that feed and cache it for 10 minutes.
+ *    (Установки → Товари/Послуги → Експорт YML, env SALESDRIVE_YML_URL; robots.txt blocks crawlers,
+ *    server-side fetch is fine). We read that feed and cache it for 10 minutes.
  *  - There is NO organizations endpoint: organizations are collected from documents; the rest is entered in the app.
  * Auth: docs name the header `Form-Api-Key`; the owner's working integration uses `X-Api-Key` — we send both.
  * `filter[id]` is not in the public docs: getOrder() therefore also matches the id in the response,
@@ -117,15 +118,24 @@ const decodeXml = (s: string): string => {
     .trim();
 };
 
-/** Minimal YML (Yandex Market XML) parser: <offer id> + <vendorCode> + <name>. */
+/**
+ * Minimal YML parser for the SalesDrive export (format checked on the real feed, 2026-11-17):
+ * <offer id="893720631" available="true"><name>…</name><quantity_in_stock>527</quantity_in_stock>
+ *   <vendorCode>0907</vendorCode><article>0907</article></offer>
+ * Offer id is a STRING and equals SalesDrive product `parameter` (not productId); ~17% look like "id_2022".
+ * Offers without vendorCode/article are skipped.
+ */
 export function parseYmlOffers(xml: string): SdProduct[] {
   const out: SdProduct[] = [];
   for (const m of xml.matchAll(/<offer\b([^>]*)>([\s\S]*?)<\/offer>/g)) {
-    const id = Number(m[1]!.match(/\bid="(\d+)"/)?.[1]);
+    const id = decodeXml(m[1]!.match(/\bid="([^"]+)"/)?.[1] ?? '');
     const tag = (t: string) => { const r = m[2]!.match(new RegExp(`<${t}>([\\s\\S]*?)</${t}>`)); return r ? decodeXml(r[1]!) : ''; };
-    const sku = tag('vendorCode') || tag('sku') || tag('article');
-    if (!Number.isFinite(id) || !sku) continue;
-    out.push({ id, sku, name: tag('name_ua') || tag('name') });
+    const sku = tag('vendorCode') || tag('article');
+    if (!id || !sku) continue;
+    const p: SdProduct = { id, sku, name: tag('name') };
+    const stock = tag('quantity_in_stock');
+    if (stock !== '' && Number.isFinite(Number(stock))) p.inStock = Number(stock);
+    out.push(p);
   }
   return out;
 }

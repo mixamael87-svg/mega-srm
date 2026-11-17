@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { isMixLine, buildDocumentLines, DocumentBuildError } from '../../src/domain/buildDocument';
 import type { SdOrder, SdOrderLine, SdProduct } from '../../src/domain/types';
 
-const line = (p: Partial<SdOrderLine>): SdOrderLine => ({ productId: 1, sku: '0001', name: 'Товар', amount: 1, price: 10, discount: 0, percentDiscount: 0, ...p });
+const line = (p: Partial<SdOrderLine>): SdOrderLine => ({ productId: 1, parameter: 'p1', sku: '0001', name: 'Товар', amount: 1, price: 10, discount: 0, percentDiscount: 0, ...p });
 const order = (lines: SdOrderLine[], o: Partial<SdOrder> = {}): SdOrder => {
   const total = lines.reduce((s, l) => s + Math.round(l.amount * Math.round(l.price * 100)), 0) / 100;
   return { id: 1, orderTime: '2026-11-12 10:00:00', contactId: 1, contactName: 'X', organizationId: null, lines, discountAmount: 0, paymentAmount: total, ...o };
@@ -12,16 +12,16 @@ const code = (c: string) => (e: unknown) => e instanceof DocumentBuildError && e
 
 const mixOrder = () => order([
   line({ productId: 10, sku: '0100', name: 'Пустушка', amount: 2, price: 30 }),
-  line({ productId: 20, sku: '0001', name: 'Ніблер (Мікс) (0001)', amount: 24, price: 45 }),
+  line({ productId: 20, parameter: 'id_20', sku: '0001', name: 'Ніблер (Мікс) (0001)', amount: 24, price: 45 }),
   line({ productId: 30, sku: '0102', name: 'Тримач для пустушки', amount: 1, price: 50 }),
 ]);
 const nibVariants: Record<string, SdProduct[]> = {
   '0001': [
-    { id: 20, sku: '0001', name: 'Ніблер (Мікс) (0001)' },
-    { id: 21, sku: '0001', name: 'Ніблер (рожевий)' },
-    { id: 22, sku: '0001', name: 'Ніблер (блакитний)' },
-    { id: 23, sku: '0001', name: 'Ніблер (зелений)' },
-    { id: 24, sku: '0001', name: 'Ніблер (бузковий)' },
+    { id: 'id_20', sku: '0001', name: 'Ніблер (Мікс) (0001)' },
+    { id: 'v21', sku: '0001', name: 'Ніблер (рожевий)' },
+    { id: 'v22', sku: '0001', name: 'Ніблер (блакитний)' },
+    { id: 'v23', sku: '0001', name: 'Ніблер (зелений)' },
+    { id: 'v24', sku: '0001', name: 'Ніблер (бузковий)' },
   ],
 };
 
@@ -44,7 +44,7 @@ describe('buildDocumentLines', () => {
   });
 
   it('replaces a mix line with its variants in place', () => {
-    const splits = [{ lineIndex: 1, parts: [21, 22, 23, 24].map(productId => ({ productId, qty: 6 })) }];
+    const splits = [{ lineIndex: 1, parts: ['v21', 'v22', 'v23', 'v24'].map(variantId => ({ variantId, qty: 6 })) }];
     const { lines, totals } = buildDocumentLines(mixOrder(), splits, nibVariants);
     expect(lines).toHaveLength(6);
     expect(lines.map(l => l.no)).toEqual([1, 2, 3, 4, 5, 6]);
@@ -55,7 +55,7 @@ describe('buildDocumentLines', () => {
   });
 
   it('skips zero-qty parts; empty parts = leave as Mix', () => {
-    const r1 = buildDocumentLines(mixOrder(), [{ lineIndex: 1, parts: [{ productId: 21, qty: 24 }, { productId: 22, qty: 0 }] }], nibVariants);
+    const r1 = buildDocumentLines(mixOrder(), [{ lineIndex: 1, parts: [{ variantId: 'v21', qty: 24 }, { variantId: 'v22', qty: 0 }] }], nibVariants);
     expect(r1.lines).toHaveLength(3);
     expect(r1.lines[1]!.name).toBe('Ніблер (рожевий)');
     const r2 = buildDocumentLines(mixOrder(), [{ lineIndex: 1, parts: [] }], nibVariants);
@@ -63,22 +63,27 @@ describe('buildDocumentLines', () => {
   });
 
   it('split sum mismatch', () => {
-    const splits = [{ lineIndex: 1, parts: [{ productId: 21, qty: 6 }, { productId: 22, qty: 6 }, { productId: 23, qty: 6 }, { productId: 24, qty: 5 }] }];
+    const splits = [{ lineIndex: 1, parts: [{ variantId: 'v21', qty: 6 }, { variantId: 'v22', qty: 6 }, { variantId: 'v23', qty: 6 }, { variantId: 'v24', qty: 5 }] }];
     expect(() => buildDocumentLines(mixOrder(), splits, nibVariants)).toThrow(code('SPLIT_SUM_MISMATCH'));
   });
 
   it('unknown variant (foreign product or the Mix itself)', () => {
-    expect(() => buildDocumentLines(mixOrder(), [{ lineIndex: 1, parts: [{ productId: 99, qty: 24 }] }], nibVariants)).toThrow(code('UNKNOWN_VARIANT'));
-    expect(() => buildDocumentLines(mixOrder(), [{ lineIndex: 1, parts: [{ productId: 20, qty: 24 }] }], nibVariants)).toThrow(code('UNKNOWN_VARIANT'));
-    expect(() => buildDocumentLines(mixOrder(), [{ lineIndex: 1, parts: [{ productId: 21, qty: 24 }] }], {})).toThrow(code('UNKNOWN_VARIANT'));
+    expect(() => buildDocumentLines(mixOrder(), [{ lineIndex: 1, parts: [{ variantId: 'v99', qty: 24 }] }], nibVariants)).toThrow(code('UNKNOWN_VARIANT'));
+    expect(() => buildDocumentLines(mixOrder(), [{ lineIndex: 1, parts: [{ variantId: 'id_20', qty: 24 }] }], nibVariants)).toThrow(code('UNKNOWN_VARIANT'));
+    expect(() => buildDocumentLines(mixOrder(), [{ lineIndex: 1, parts: [{ variantId: 'v21', qty: 24 }] }], {})).toThrow(code('UNKNOWN_VARIANT'));
+  });
+
+  it('a variant whose name is a Mix is never a colour', () => {
+    const v = { '0001': [...nibVariants['0001']!, { id: 'id_77', sku: '0001', name: 'Ніблер (мікс) новий' }] };
+    expect(() => buildDocumentLines(mixOrder(), [{ lineIndex: 1, parts: [{ variantId: 'id_77', qty: 24 }] }], v)).toThrow(code('UNKNOWN_VARIANT'));
   });
 
   it('invalid split target (not a mix line / out of range / duplicate)', () => {
-    expect(() => buildDocumentLines(mixOrder(), [{ lineIndex: 0, parts: [{ productId: 21, qty: 2 }] }], nibVariants)).toThrow(code('INVALID_SPLIT'));
-    expect(() => buildDocumentLines(mixOrder(), [{ lineIndex: 7, parts: [{ productId: 21, qty: 2 }] }], nibVariants)).toThrow(code('INVALID_SPLIT'));
-    const p = [{ productId: 21, qty: 24 }];
+    expect(() => buildDocumentLines(mixOrder(), [{ lineIndex: 0, parts: [{ variantId: 'v21', qty: 2 }] }], nibVariants)).toThrow(code('INVALID_SPLIT'));
+    expect(() => buildDocumentLines(mixOrder(), [{ lineIndex: 7, parts: [{ variantId: 'v21', qty: 2 }] }], nibVariants)).toThrow(code('INVALID_SPLIT'));
+    const p = [{ variantId: 'v21', qty: 24 }];
     expect(() => buildDocumentLines(mixOrder(), [{ lineIndex: 1, parts: p }, { lineIndex: 1, parts: p }], nibVariants)).toThrow(code('INVALID_SPLIT'));
-    expect(() => buildDocumentLines(mixOrder(), [{ lineIndex: 1, parts: [{ productId: 21, qty: -1 }, { productId: 22, qty: 25 }] }], nibVariants)).toThrow(code('INVALID_SPLIT'));
+    expect(() => buildDocumentLines(mixOrder(), [{ lineIndex: 1, parts: [{ variantId: 'v21', qty: -1 }, { variantId: 'v22', qty: 25 }] }], nibVariants)).toThrow(code('INVALID_SPLIT'));
   });
 
   it('float prices are rounded to kopecks', () => {

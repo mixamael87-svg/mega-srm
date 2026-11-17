@@ -20,6 +20,7 @@ export function mapOrder(raw: any): SdOrder {
     paymentAmount: num(raw.paymentAmount),
     lines: (raw.products ?? []).map((p: any) => ({
       productId: num(p.productId),
+      parameter: str(p.parameter).trim(),
       sku: str(p.sku).trim(),
       name: str(p.text ?? p.name).trim(),
       amount: num(p.amount),

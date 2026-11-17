@@ -52,10 +52,10 @@ export function buildDocumentLines(
     if (sum !== l.amount) {
       throw new DocumentBuildError('SPLIT_SUM_MISMATCH', `«${l.name}»: розбито ${sum} з ${l.amount}`, { lineIndex: i, sum, expected: l.amount });
     }
-    const allowed = (variants[l.sku] ?? []).filter(v => v.id !== l.productId && v.sku === l.sku);
+    const allowed = (variants[l.sku] ?? []).filter(v => v.sku === l.sku && v.id !== l.parameter && !isMixLine(v.name));
     for (const p of parts) {
-      const v = allowed.find(a => a.id === p.productId);
-      if (!v) throw new DocumentBuildError('UNKNOWN_VARIANT', `Товар ${p.productId} не є кольором артикулу ${l.sku}`, { lineIndex: i, productId: p.productId });
+      const v = allowed.find(a => a.id === p.variantId);
+      if (!v) throw new DocumentBuildError('UNKNOWN_VARIANT', `Товар ${p.variantId} не є кольором артикулу ${l.sku}`, { lineIndex: i, variantId: p.variantId });
       push(v.sku, v.name, p.qty, priceKop);
     }
   });

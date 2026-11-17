@@ -27,8 +27,8 @@ describe('getOrder', () => {
       id: 55225, orderTime: '2026-11-16 14:05:00', contactId: 43692, contactName: 'Палій Анна', organizationId: null,
       discountAmount: 0, paymentAmount: 167,
       lines: [
-        { productId: 2947, sku: '0935', name: 'Заводна іграшка для купання "Кит" (синій)', amount: 1, price: 76, discount: 0, percentDiscount: 0 },
-        { productId: 972, sku: '0919', name: 'Заводна іграшка для купання "Черепашка" (зелена)', amount: 1, price: 91, discount: 0, percentDiscount: 0 },
+        { productId: 2947, parameter: '3209933633', sku: '0935', name: 'Заводна іграшка для купання "Кит" (синій)', amount: 1, price: 76, discount: 0, percentDiscount: 0 },
+        { productId: 972, parameter: '1884550628', sku: '0919', name: 'Заводна іграшка для купання "Черепашка" (зелена)', amount: 1, price: 91, discount: 0, percentDiscount: 0 },
       ],
     });
     const u = new URL(calls[0]!.url);
@@ -72,29 +72,37 @@ describe('getOrder', () => {
 });
 
 describe('listProductsBySku (YML catalog)', () => {
-  it('returns only exact sku matches, decodes entities/CDATA', async () => {
+  it('real export format: string ids (= SalesDrive product `parameter`), exact sku match', async () => {
     const { f } = mockFetch(() => ({ body: yml }));
-    const c = createSalesDriveClient(cfg(f, { catalogYmlUrl: 'https://mega.salesdrive.me/export/yml/x.xml' }));
-    expect(await c.listProductsBySku('0525')).toEqual([
-      { id: 2101, sku: '0525', name: 'Пустушка латексна (Мікс) 0+' },
-      { id: 2102, sku: '0525', name: 'Пустушка латексна (Зелена) 0+' },
-      { id: 2103, sku: '0525', name: 'Пустушка латексна (Бузкова) 0+ & "ко"' },
+    const c = createSalesDriveClient(cfg(f, { catalogYmlUrl: 'https://mega.salesdrive.me/export/yml/x.yml' }));
+    expect(await c.listProductsBySku('0907')).toEqual([
+      { id: '893720631', sku: '0907', name: 'Шапочка для купання "Тварини" (рожева)', inStock: 527 },
+      { id: 'id_2022', sku: '0907', name: 'Шапочка для купання "Тварини" (Мікс)', inStock: 0 },
+      { id: '893724066', sku: '0907', name: 'Шапочка для купання "Тварини" (зелена)', inStock: 10 },
+      { id: '893724169', sku: '0907', name: 'Шапочка для купання "Тварини" (жовта)', inStock: 2 },
     ]);
+    expect(await c.listProductsBySku('PL20')).toHaveLength(1);
     expect(await c.listProductsBySku('9999')).toEqual([]);
+    expect(await c.listProductsBySku('')).toEqual([]);
+  });
+  it('decodes entities and CDATA', async () => {
+    const { f } = mockFetch(() => ({ body: yml }));
+    const c = createSalesDriveClient(cfg(f, { catalogYmlUrl: 'https://x/y.yml' }));
+    expect((await c.listProductsBySku('9998')).map(p => p.name)).toEqual(['Тримач & ланцюжок "А"', 'Тримач <нов> & "Б"']);
   });
   it('caches the catalog for 10 minutes', async () => {
     let now = 0;
     const { f, calls } = mockFetch(() => ({ body: yml }));
     const c = createSalesDriveClient(cfg(f, { catalogYmlUrl: 'https://x/y.xml', now: () => now }));
-    await c.listProductsBySku('0525'); await c.listProductsBySku('0001');
+    await c.listProductsBySku('0907'); await c.listProductsBySku('0919');
     expect(calls).toHaveLength(1);
     now = 10 * 60 * 1000 + 1;
-    await c.listProductsBySku('0525');
+    await c.listProductsBySku('0907');
     expect(calls).toHaveLength(2);
   });
   it('no catalog configured → empty list (split unavailable)', async () => {
     const { f, calls } = mockFetch(() => ({ body: yml }));
-    expect(await createSalesDriveClient(cfg(f)).listProductsBySku('0525')).toEqual([]);
+    expect(await createSalesDriveClient(cfg(f)).listProductsBySku('0907')).toEqual([]);
     expect(calls).toHaveLength(0);
   });
 });

@@ -1,13 +1,58 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<yml_catalog date="2026-11-17 09:00">
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!-- Fragment of the real SalesDrive YML export (2026-11-17) + synthetic edge cases marked below -->
+<yml_catalog date="2026-11-17 09:58">
   <shop>
+    <name>База заявок 1</name>
     <offers>
-      <offer id="2101" available="true"><name>Пустушка латексна (Мікс) 0+</name><vendorCode>0525</vendorCode><price>40</price></offer>
-      <offer id="2102" available="true"><name>Пустушка латексна (Зелена) 0+</name><vendorCode>0525</vendorCode></offer>
-      <offer id="2103" available="false"><name><![CDATA[Пустушка латексна (Бузкова) 0+ & "ко"]]></name><vendorCode>0525</vendorCode></offer>
-      <offer id="2200"><name>Ніблер (рожевий)</name><vendorCode>0001</vendorCode></offer>
-      <offer id="2300"><name>Без артикулу</name></offer>
-      <offer id="2400"><name>Тримач &amp; ланцюжок</name><vendorCode>05250</vendorCode></offer>
+      <offer id="2962216646" available="false">
+        <price>119</price>
+        <currencyId>UAH</currencyId>
+        <name>Эко-чашка с крышкой (Синий пингвин)</name>
+        <quantity_in_stock>0</quantity_in_stock>
+      </offer>
+      <offer id="893720631" available="true">
+        <price>84</price>
+        <currencyId>UAH</currencyId>
+        <name>Шапочка для купання "Тварини" (рожева)</name>
+        <quantity_in_stock>527</quantity_in_stock>
+        <vendorCode>0907</vendorCode>
+        <article>0907</article>
+      </offer>
+<offer id="id_2022" available="false">
+        <price>79</price>
+        <currencyId>UAH</currencyId>
+        <name>Шапочка для купання "Тварини" (Мікс)</name>
+        <quantity_in_stock>0</quantity_in_stock>
+        <vendorCode>0907</vendorCode>
+        <article>0907</article>
+      </offer>
+<offer id="893724066" available="true">
+        <price>84</price>
+        <currencyId>UAH</currencyId>
+        <name>Шапочка для купання "Тварини" (зелена)</name>
+        <quantity_in_stock>10</quantity_in_stock>
+        <vendorCode>0907</vendorCode>
+        <article>0907</article>
+      </offer>
+<offer id="893724169" available="true">
+        <price>84</price>
+        <currencyId>UAH</currencyId>
+        <name>Шапочка для купання "Тварини" (жовта)</name>
+        <quantity_in_stock>2</quantity_in_stock>
+        <vendorCode>0907</vendorCode>
+        <article>0907</article>
+      </offer>
+      <offer id="777000001" available="true">
+        <price>10</price>
+        <currencyId>UAH</currencyId>
+        <name>Рюкзак дорожній</name>
+        <quantity_in_stock>3</quantity_in_stock>
+        <vendorCode>PL20</vendorCode>
+        <article>PL20</article>
+      </offer>
+      <!-- synthetic: entities and CDATA -->
+      <offer id="999000001" available="true"><name>Тримач &amp; ланцюжок &quot;А&quot;</name><quantity_in_stock>1</quantity_in_stock><vendorCode>9998</vendorCode></offer>
+      <offer id="999000002" available="true"><name><![CDATA[Тримач <нов> & "Б"]]></name><vendorCode>9998</vendorCode></offer>
     </offers>
   </shop>
 </yml_catalog>

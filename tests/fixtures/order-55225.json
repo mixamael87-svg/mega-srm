@@ -7,7 +7,7 @@
   "discountAmount": 0,
   "paymentAmount": 167,
   "lines": [
-    { "productId": 2947, "sku": "0935", "name": "Заводна іграшка для купання \"Кит\" (синій)", "amount": 1, "price": 76, "discount": 0, "percentDiscount": 0 },
-    { "productId": 972, "sku": "0919", "name": "Заводна іграшка для купання \"Черепашка\" (зелена)", "amount": 1, "price": 91, "discount": 0, "percentDiscount": 0 }
+    { "productId": 2947, "parameter": "3209933633", "sku": "0935", "name": "Заводна іграшка для купання \"Кит\" (синій)", "amount": 1, "price": 76, "discount": 0, "percentDiscount": 0 },
+    { "productId": 972, "parameter": "1884550628", "sku": "0919", "name": "Заводна іграшка для купання \"Черепашка\" (зелена)", "amount": 1, "price": 91, "discount": 0, "percentDiscount": 0 }
   ]
 }
