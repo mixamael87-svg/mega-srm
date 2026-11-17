@@ -60,6 +60,7 @@ export function createDocumentService(deps: { prisma: PrismaClient; sd: SalesDri
     if (client.archived) throw new HttpError(409, 'ФОП одержувача в архіві', 'RECIPIENT_ARCHIVED');
     const fop = await prisma.ourFop.findUnique({ where: { id: input.fopId } });
     if (!fop) throw new HttpError(400, 'Оберіть постачальника', 'FOP_NOT_FOUND');
+    if (fop.archived) throw new HttpError(409, 'Постачальник в архіві', 'FOP_ARCHIVED');
 
     const splitSkus = input.splits.map(s => order.lines[s.lineIndex]?.sku).filter((s): s is string => !!s);
     const { lines, totals } = buildDocumentLines(order, input.splits, await variantsFor(splitSkus));

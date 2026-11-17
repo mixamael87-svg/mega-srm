@@ -24,7 +24,7 @@ export const GET = route(async (req: Request, ctx: { params: Promise<{ id: strin
   const [recipients, defaultRecipientFopId, fops, docs] = await Promise.all([
     createClientService(prisma).recipientOptions(),
     documentService().defaultRecipientFor(order.contactId),
-    prisma.ourFop.findMany({ orderBy: { id: 'asc' } }),
+    prisma.ourFop.findMany({ where: { archived: false }, orderBy: { id: 'asc' } }),
     prisma.document.findMany({ where: { sdOrderId: id }, select: { id: true, type: true, number: true, status: true } }),
   ]);
   const defaultFop = fops.find(f => order.organizationId != null && f.sdOrganizationId === order.organizationId) ?? fops.find(f => f.isDefault) ?? fops[0];

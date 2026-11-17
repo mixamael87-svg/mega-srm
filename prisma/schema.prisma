@@ -43,6 +43,8 @@ model OurFop {
   requisites       String  @db.Text
   phone            String  @default("")
   isDefault        Boolean @default(false)
+  /// hidden from the supplier choice; kept because documents and the rahunok counter refer to it
+  archived         Boolean @default(false)
 
   counters  InvoiceCounter[]
   documents Document[]

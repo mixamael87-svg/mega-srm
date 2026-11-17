@@ -132,6 +132,11 @@ describe('document service', () => {
     expect([b.documentId, b.number]).toEqual([a.documentId, 1]);
   });
 
+  it('archived supplier (our FOP) → FOP_ARCHIVED', async () => {
+    await prisma.ourFop.update({ where: { id: fopId }, data: { archived: true } });
+    await expect(svc.generateDocument({ ...base, type: 'NAKLADNA', sdOrderId: 54969 })).rejects.toMatchObject({ code: 'FOP_ARCHIVED', status: 409 });
+  });
+
   it('order not found → ORDER_NOT_FOUND (404)', async () => {
     await expect(svc.generateDocument({ ...base, type: 'NAKLADNA', sdOrderId: 1 })).rejects.toMatchObject({ code: 'ORDER_NOT_FOUND', status: 404 });
   });

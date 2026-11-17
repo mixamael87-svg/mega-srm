@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { prisma } from '@/db/prisma';
 import { requireUser } from '@/auth/session';
-import { jsonResponse, route } from '@/http/errors';
+import { Prisma } from '@prisma/client';
+import { HttpError, jsonResponse, route } from '@/http/errors';
+import { createOurFopService } from '@/services/ourFops';
 
 export const GET = route(async (req: Request) => {
   await requireUser(req);
@@ -28,12 +30,25 @@ export const POST = route(async (req: Request) => {
   return jsonResponse(fop, 201);
 });
 
+/** Partial update: only the fields sent are changed (no defaults, so a restore can't wipe requisites). */
+const Patch = z.object({
+  id: z.number().int().positive(),
+  name: z.string().trim().min(2, 'Вкажіть назву ФОП').optional(),
+  requisites: z.string().trim().optional(),
+  phone: z.string().trim().optional(),
+  isDefault: z.boolean().optional(),
+  archived: z.boolean().optional(),
+  sdOrganizationId: z.number().int().positive().nullable().optional(),
+});
+
 export const PATCH = route(async (req: Request) => {
   await requireUser(req, 'admin');
-  const body = await req.json();
-  const id = z.number().int().positive().parse(body?.id);
-  const d = Fop.partial().parse(body);
-  const fop = await prisma.ourFop.update({ where: { id }, data: d });
+  const { id, ...d } = Patch.parse(await req.json());
+  if (d.archived === false) await createOurFopService(prisma).restore(id);
+  const fop = await prisma.ourFop.update({ where: { id }, data: d }).catch(e => {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') throw new HttpError(404, 'ФОП не знайдено');
+    throw e;
+  });
   await setDefault(id, !!d.isDefault);
   return jsonResponse(fop);
 });
