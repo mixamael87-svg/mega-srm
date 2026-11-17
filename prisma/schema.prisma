@@ -48,14 +48,39 @@ model OurFop {
   documents Document[]
 }
 
-/// ФОП клиента (одержувач), привязан к контакту SalesDrive
-model ClientFop {
-  id          Int    @id @default(autoincrement())
-  sdContactId Int    @unique
-  name        String
-  requisites  String @db.Text
+/// Клиент (справочник «Клієнти»): один или несколько ФОП-получателей
+model Client {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String   @default("")
+  comment   String   @default("")
+  createdAt DateTime @default(now())
 
+  fops ClientFop[]
+}
+
+/// ФОП клиента (одержувач документа)
+model ClientFop {
+  id         Int     @id @default(autoincrement())
+  clientId   Int
+  name       String
+  requisites String  @db.Text
+  archived   Boolean @default(false)
+
+  client    Client           @relation(fields: [clientId], references: [id])
   documents Document[]
+  defaults  ContactDefault[]
+
+  @@index([clientId])
+}
+
+/// Последний выбранный ФОП получателя для контакта SalesDrive (подставляется по умолчанию)
+model ContactDefault {
+  sdContactId Int      @id
+  clientFopId Int
+  updatedAt   DateTime @updatedAt
+
+  clientFop ClientFop @relation(fields: [clientFopId], references: [id])
 }
 
 /// Счётчик номеров рахунків: (наш ФОП × год × месяц)
