@@ -39,9 +39,10 @@ function normBarcode(barcode: string | null | undefined, sku: string | null): st
   if (b && !isValidEan13(b)) throw new HttpError(400, 'Невірний штрихкод');
   return b;
 }
-function normText(text: string | undefined): string {
+/** Text is required unless the label carries a barcode (barcode-only labels exist, e.g. 0105). */
+function normText(text: string | undefined, barcode: string): string {
   const t = (text ?? '').replace(/\r\n/g, '\n').trim();
-  if (!t) throw new HttpError(400, 'Вкажіть текст наклейки');
+  if (!t && !barcode) throw new HttpError(400, 'Вкажіть текст наклейки');
   return t;
 }
 export const toContent = (l: Pick<Label, 'text' | 'align' | 'showMark' | 'barcode'>): LabelContent =>
@@ -102,10 +103,11 @@ export function createLabelService(prisma: PrismaClient) {
     async createLabel(setId: number, input: LabelInput) {
       await getSet(setId);
       const sku = normSku(input.sku);
+      const barcode = normBarcode(input.barcode, sku);
       const data = {
-        setId, sku, title: (input.title ?? '').trim(), text: normText(input.text),
+        setId, sku, title: (input.title ?? '').trim(), text: normText(input.text, barcode),
         align: input.align ?? 'center', showMark: input.showMark ?? false,
-        barcode: normBarcode(input.barcode, sku), noPrint: input.noPrint ?? false, extraLabelId: input.extraLabelId ?? null,
+        barcode, noPrint: input.noPrint ?? false, extraLabelId: input.extraLabelId ?? null,
       } as const;
       await checkExtra(setId, data.extraLabelId);
       try { return await prisma.label.create({ data }); }
@@ -117,12 +119,13 @@ export function createLabelService(prisma: PrismaClient) {
       const data: Prisma.LabelUncheckedUpdateInput = {};
       if (input.sku !== undefined) data.sku = sku;
       if (input.title !== undefined) data.title = input.title.trim();
-      if (input.text !== undefined) data.text = normText(input.text);
+      const newBarcode = input.barcode !== undefined ? normBarcode(input.barcode, sku) : undefined;
       if (input.align !== undefined) data.align = input.align;
       if (input.showMark !== undefined) data.showMark = input.showMark;
       if (input.noPrint !== undefined) data.noPrint = input.noPrint;
-      if (input.barcode !== undefined) data.barcode = normBarcode(input.barcode, sku);
+      if (newBarcode !== undefined) data.barcode = newBarcode;
       else if (input.sku !== undefined && cur.barcode === ean13FromSku(cur.sku ?? '')) data.barcode = sku ? ean13FromSku(sku) : '';
+      if (input.text !== undefined) data.text = normText(input.text, String(data.barcode ?? cur.barcode));
       if (input.extraLabelId !== undefined) { await checkExtra(cur.setId, input.extraLabelId, id); data.extraLabelId = input.extraLabelId; }
       try { return await prisma.label.update({ where: { id }, data }); }
       catch (e) { if (isUnique(e)) throw dupSku(sku); throw e; }
@@ -147,9 +150,10 @@ export function createLabelService(prisma: PrismaClient) {
             if (!x) throw new HttpError(400, `Немає наклейки «${it.extraTitle}» для ${sku ?? title}`);
             extraLabelId = x.id;
           }
+          const barcode = normBarcode(it.barcode, sku);
           const data = {
-            title, text: normText(it.text), align: it.align ?? 'center', showMark: it.showMark ?? false,
-            barcode: normBarcode(it.barcode, sku), noPrint: it.noPrint ?? false, extraLabelId,
+            title, text: normText(it.text, barcode), align: it.align ?? 'center', showMark: it.showMark ?? false,
+            barcode, noPrint: it.noPrint ?? false, extraLabelId,
           } as const;
           const existing = sku ? await tx.label.findFirst({ where: { setId, sku } }) : await tx.label.findFirst({ where: { setId, sku: null, title } });
           if (existing) { await tx.label.update({ where: { id: existing.id }, data }); updated++; }

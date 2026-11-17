@@ -67,7 +67,7 @@ describe('labels API', () => {
   it('validates sku, duplicates, text and the extra label set', async () => {
     const e = async (r: Promise<Response>) => { const x = await r; return [x.status, (await x.json()).error]; };
     expect(await e(createLabel(req('/x', post({ sku: '205', text: 't' }), m), params(zag)))).toEqual([400, 'Артикул — 4 цифри']);
-    expect(await e(createLabel(req('/x', post({ sku: '0205', text: '  ' }), m), params(zag)))).toEqual([400, 'Вкажіть текст наклейки']);
+    expect(await e(createLabel(req('/x', post({ sku: '0205', text: '  ', barcode: '' }), m), params(zag)))).toEqual([400, 'Вкажіть текст наклейки']);
     await createLabel(req('/x', post({ sku: '0205', text: 't' }), m), params(zag));
     expect(await e(createLabel(req('/x', post({ sku: '0205', text: 't' }), m), params(zag)))).toEqual([400, 'Наклейка з артикулом 0205 вже є в цьому наборі']);
     const other = await (await createLabel(req('/x', post({ title: 'Ч2', text: 'x', barcode: '' }), m), params(kuz))).json();
@@ -106,6 +106,14 @@ describe('labels API', () => {
     const l = await prisma.label.findFirstOrThrow({ where: { sku: '1205' }, include: { extraLabel: true } });
     expect(l.extraLabel?.title).toBe('Частина 2 (серія 1200)');
     expect(l.barcode).toBe('4826077012052');
+  });
+
+  it('a barcode-only label may have no text; without a barcode the text is required', async () => {
+    const r = await createLabel(req('/x', post({ sku: '0105', text: '' }), m), params(zag));
+    expect(r.status).toBe(201);
+    expect(await r.json()).toMatchObject({ text: '', barcode: '4826077001056' });
+    const bad = await createLabel(req('/x', post({ title: 'Порожня', text: '', barcode: '' }), m), params(zag));
+    expect([bad.status, (await bad.json()).error]).toEqual([400, 'Вкажіть текст наклейки']);
   });
 
   it('preview returns a one-page PDF', async () => {
