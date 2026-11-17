@@ -27,8 +27,6 @@ export const COLUMNS = {
 export type DocLayout = {
   title: string;
   columns: Column[];
-  /** Rahunok: "ПДВ: 0,00 грн." after the amount in words */
-  vatLineAfterWords: boolean;
   sheetName: string;
 };
 
@@ -45,14 +43,14 @@ export async function renderDocument(layout: DocLayout, h: DocHeader, lines: Doc
   const cols = layout.columns;
   const n = cols.length;
   ws.columns = cols.map(c => ({ width: c.width }));
-  ws.properties.defaultRowHeight = 12;
+  ws.properties.defaultRowHeight = 13;
 
   let r = 0;
   const row = () => ws.getRow(++r);
   const put = (rowNo: number, col: number, value: string, opts: { bold?: boolean; size?: number; italic?: boolean; align?: ExcelJS.Alignment['horizontal']; wrap?: boolean; toCol?: number; border?: boolean } = {}) => {
     const cell = ws.getCell(rowNo, col);
     cell.value = value;
-    cell.font = { name: FONT, size: opts.size ?? 9, bold: !!opts.bold, italic: !!opts.italic };
+    cell.font = { name: FONT, size: opts.size ?? 10, bold: !!opts.bold, italic: !!opts.italic };
     cell.alignment = { horizontal: opts.align ?? 'left', vertical: 'top', wrapText: opts.wrap ?? false };
     if (opts.toCol && opts.toCol > col) ws.mergeCells(rowNo, col, rowNo, opts.toCol);
     if (opts.border) for (let c = col; c <= (opts.toCol ?? col); c++) ws.getCell(rowNo, c).border = box;
@@ -65,7 +63,7 @@ export async function renderDocument(layout: DocLayout, h: DocHeader, lines: Doc
     const rw = row();
     put(r, 1, label, { bold: true, toCol: 2 });
     put(r, 3, value, { wrap: true, toCol: n });
-    rw.height = 12 * lineCount(value) + 2;
+    rw.height = 13 * lineCount(value) + 2;
   }
   row();
 
@@ -84,14 +82,14 @@ export async function renderDocument(layout: DocLayout, h: DocHeader, lines: Doc
     cols.forEach((c, i) => put(r, i + 1, c.value(l), { align: c.align, border: true, wrap: c.align === 'left' }));
     const nameCol = cols.findIndex(c => c.title === 'Повна назва товару');
     const width = cols[nameCol]?.width ?? 40;
-    rw.height = 12 * Math.max(1, Math.ceil(l.name.length / (width * 1.3)));
+    rw.height = 13 * Math.max(1, Math.ceil(l.name.length / (width * 1.15)));
   }
 
   // Итоги
   const total = (label: string, kop: number, bold = false) => {
     row();
     put(r, 3, label, { bold, align: 'right', toCol: n - 1 });
-    put(r, n, formatMoney(kop), { bold, align: 'right' });
+    put(r, n, formatMoney(kop), { bold, align: 'right', border: true });
   };
   if (t.discountKop !== 0) {
     total('Сума без знижки:', t.grossKop);
@@ -103,25 +101,31 @@ export async function renderDocument(layout: DocLayout, h: DocHeader, lines: Doc
   total('Всього з ПДВ:', t.netKop, true);
   row();
 
-  row().height = 24;
-  put(r, 1, 'Всього на суму:', { bold: true, toCol: 2 });
-  put(r, 3, amountInWordsUah(t.netKop), { bold: true, wrap: true, toCol: n });
-  if (layout.vatLineAfterWords) {
-    row();
-    put(r, 1, 'ПДВ: 0,00 грн.', { toCol: n });
-  }
+  // «Всього на суму:» / сумма прописью / «ПДВ: 0,00 грн.» — as in УкрСклад (both documents)
+  const half = Math.max(3, n - 3);
   row();
+  put(r, 1, 'Всього на суму:', { bold: true, toCol: half });
+  const words = amountInWordsUah(t.netKop);
+  const wordsRow = row();
+  put(r, 1, words, { bold: true, wrap: true, toCol: half });
+  const halfWidth = cols.slice(0, half).reduce((a, c) => a + c.width, 0);
+  wordsRow.height = 13 * Math.max(1, Math.ceil(words.length / (halfWidth * 1.1)));
+  row();
+  row();
+  put(r, 1, 'ПДВ: 0,00 грн.', { bold: true, toCol: half });
 
-  // Подписи
-  const line = (text: string, opts: { bold?: boolean; italic?: boolean; size?: number } = {}) => { row(); put(r, 1, text, { ...opts, toCol: n }); };
+  // Подписи: две колонки, как в №766
+  const left = (text: string, opts: { bold?: boolean; size?: number } = {}) => put(r, 1, text, { ...opts, toCol: 3 });
+  const right = (text: string, opts: { bold?: boolean } = {}) => put(r, 4, text, { ...opts, toCol: n });
   row();
-  line('Від постачальника*:   ______________________________', { bold: true });
   row();
-  line('Отримав(ла):   ______________________________', { bold: true });
-  line('                          за дов. № ____________ від ____________');
+  left('Від постачальника*:  ________________________', { bold: true });
+  right('Отримав(ла):  ____________________', { bold: true });
+  row().height = 18;
+  put(r, 1, '* Відповідальний за здійснення господарської операції і правильність її оформлення', { size: 6, wrap: true, toCol: 3 });
   row();
-  line('* Відповідальний за здійснення господарської операції і правильність її оформлення', { italic: true, size: 8 });
-  line('Місце складання:   ______________________________', { bold: true });
+  left('Місце складання:  ________________________', { bold: true });
+  right('за дов. № ________ від ________');
 
   ws.pageSetup.printArea = `A1:${ws.getColumn(n).letter}${r}`;
   return Buffer.from(await wb.xlsx.writeBuffer());

@@ -6,7 +6,6 @@ export function renderRahunok(h: DocHeader, lines: DocLine[], t: DocTotals): Pro
     {
       title: 'Рахунок-фактура',
       sheetName: 'Рахунок',
-      vatLineAfterWords: true,
       columns: [COLUMNS.no, COLUMNS.sku, COLUMNS.name(56), COLUMNS.qty, COLUMNS.price, COLUMNS.sum],
     },
     h, lines, t,

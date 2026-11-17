@@ -40,6 +40,17 @@ function right(s: Sheet, label: string): string | undefined {
   }
   return undefined;
 }
+/** First non-empty cell of the row below the cell whose text equals `label`. */
+function below(s: Sheet, label: string): string | undefined {
+  const i = s.rows.findIndex(r => r.some(c => c.trim() === label));
+  return i >= 0 ? s.rows[i + 1]?.find(c => c.trim() !== '') : undefined;
+}
+const rowWith = (s: Sheet, ...texts: string[]) => s.rows.some(r => texts.every(t => r.some(c => c.startsWith(t))));
+function cellByText(ws: ExcelJS.Worksheet, text: string): ExcelJS.Cell | undefined {
+  let found: ExcelJS.Cell | undefined;
+  ws.eachRow(r => r.eachCell(c => { if (!found && String(c.text).trim() === text) found = c; }));
+  return found;
+}
 const rowOf = (s: Sheet, first: string) => s.rows.find(r => r.filter(c => c !== '')[0] === first)?.filter(c => c !== '');
 
 describe('renderNakladna', () => {
@@ -53,7 +64,10 @@ describe('renderNakladna', () => {
     expect(right(s, 'Разом без ПДВ:')).toBe('39628,55');
     expect(right(s, 'ПДВ:')).toBe('0,00');
     expect(right(s, 'Всього з ПДВ:')).toBe('39628,55');
-    expect(right(s, 'Всього на суму:')).toBe("Тридцять дев'ять тисяч шістсот двадцять вісім гривень 55 копійок");
+    expect(below(s, 'Всього на суму:')).toBe("Тридцять дев'ять тисяч шістсот двадцять вісім гривень 55 копійок");
+    expect(has(s, 'ПДВ: 0,00 грн.')).toBe(true); // as in УкрСклад №766
+    expect(rowWith(s, 'Від постачальника*:', 'Отримав(ла):')).toBe(true);
+    expect(rowWith(s, 'Місце складання:', 'за дов. №')).toBe(true);
     for (const t of ['Від постачальника*:', 'Отримав(ла):', 'Місце складання:', 'за дов. №', '* Відповідальний за здійснення господарської операції і правильність її оформлення']) expect(has(s, t)).toBe(true);
     expect(has(s, 'Сума без знижки')).toBe(false);
   });
@@ -63,6 +77,15 @@ describe('renderNakladna', () => {
     expect(right(s, 'Одержувач:')).toContain('ФОП Палій Анна');
     expect(right(s, 'Платник:')).toBe('той самий');
     expect(rowOf(s, 'Умова продажу:')).toBeTruthy();
+  });
+  it('style as УкрСклад №766: Arial 10, boxed totals, bold amount in words', async () => {
+    const { ws } = await load(await renderNakladna(header(1, new Date()), lines, totals));
+    expect(cellByText(ws, 'Ніблер (рожевий)')!.font).toMatchObject({ name: 'Arial', size: 10 });
+    const label = cellByText(ws, 'Всього з ПДВ:')!;
+    const value = ws.getRow(Number(label.row)).getCell(ws.columnCount);
+    expect(value.text).toBe('39628,55');
+    expect(value.border?.top?.style).toBe('thin');
+    expect(cellByText(ws, "Тридцять дев'ять тисяч шістсот двадцять вісім гривень 55 копійок")!.font?.bold).toBe(true);
   });
   it('page setup: A4 portrait, fit to width', async () => {
     const { ws } = await load(await renderNakladna(header(1, new Date()), lines, totals));
@@ -80,7 +103,7 @@ describe('renderNakladna', () => {
     expect(right(s, 'Сума зі знижкою:')).toBe('150,00');
     expect(right(s, 'Разом без ПДВ:')).toBe('150,00');
     expect(right(s, 'Всього з ПДВ:')).toBe('150,00');
-    expect(right(s, 'Всього на суму:')).toBe("Сто п'ятдесят гривень 00 копійок");
+    expect(below(s, 'Всього на суму:')).toBe("Сто п'ятдесят гривень 00 копійок");
   });
 });
 

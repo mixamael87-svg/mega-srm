@@ -6,7 +6,6 @@ export function renderNakladna(h: DocHeader, lines: DocLine[], t: DocTotals): Pr
     {
       title: 'Видаткова накладна',
       sheetName: 'Накладна',
-      vatLineAfterWords: false,
       columns: [COLUMNS.no, COLUMNS.sku, COLUMNS.name(41), COLUMNS.barcode, COLUMNS.qty, COLUMNS.price, COLUMNS.sum],
     },
     h, lines, t,
