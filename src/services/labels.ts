@@ -1,7 +1,8 @@
 import { Prisma, type PrismaClient, type Label } from '@prisma/client';
 import { HttpError } from '../http/errors';
 import { ean13FromSku, isValidEan13 } from '../domain/barcode';
-import type { LabelContent, LabelRecord } from '../domain/labels';
+import { planLabels, type LabelContent, type LabelPlan, type LabelRecord } from '../domain/labels';
+import type { DocLine } from '../domain/types';
 import { labelFits } from '../labels/renderLabelsPdf';
 
 export type LabelInput = {
@@ -167,5 +168,18 @@ export function createLabelService(prisma: PrismaClient) {
       }));
     },
     getSet,
+
+    /** What the set prints for a document: only an ACTIVE nakladna; lines from its latest version. */
+    async planForDocument(documentId: number, setId: number): Promise<{ setName: string; docNumber: number; plan: LabelPlan }> {
+      const doc = await prisma.document.findUnique({
+        where: { id: documentId },
+        select: { type: true, status: true, number: true, versions: { orderBy: { id: 'desc' }, take: 1, select: { linesJson: true } } },
+      });
+      if (!doc) throw new HttpError(404, 'Документ не знайдено');
+      if (doc.type !== 'NAKLADNA' || doc.status !== 'ACTIVE') throw new HttpError(409, 'Наклейки друкуються лише з активної видаткової накладної', 'LABELS_NOT_ALLOWED');
+      const set = await getSet(setId);
+      const lines = (doc.versions[0]?.linesJson ?? []) as DocLine[];
+      return { setName: set.name, docNumber: doc.number, plan: planLabels(lines, await this.recordsForSet(setId)) };
+    },
   };
 }
