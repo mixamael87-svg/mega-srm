@@ -8,7 +8,7 @@ import { renderRahunok } from '../excel/renderRahunok';
 import { HttpError } from '../http/errors';
 import { nextInvoiceNumber } from './numbering';
 
-export type GenerateInput = { type: DocType; sdOrderId: number; fopId: number; date: Date; splits: MixSplit[]; userId: number };
+export type GenerateInput = { type: DocType; sdOrderId: number; fopId: number; recipientFopId?: number; date: Date; splits: MixSplit[]; userId: number };
 export type GeneratedFile = { documentId: number; number: number; file: Buffer; filename: string };
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -54,8 +54,10 @@ export function createDocumentService(deps: { prisma: PrismaClient; sd: SalesDri
   async function generateOnce(input: GenerateInput): Promise<GeneratedFile> {
     const order = await sd.getOrder(input.sdOrderId);
     if (!order) throw new HttpError(404, `Замовлення № ${input.sdOrderId} не знайдено в SalesDrive`, 'ORDER_NOT_FOUND');
-    const client = await prisma.clientFop.findUnique({ where: { sdContactId: order.contactId } });
-    if (!client) throw new HttpError(409, 'Введіть реквізити одержувача', 'RECIPIENT_REQUISITES_MISSING');
+    if (!input.recipientFopId) throw new HttpError(400, 'Оберіть одержувача', 'RECIPIENT_REQUIRED');
+    const client = await prisma.clientFop.findUnique({ where: { id: input.recipientFopId } });
+    if (!client) throw new HttpError(404, 'ФОП одержувача не знайдено', 'RECIPIENT_NOT_FOUND');
+    if (client.archived) throw new HttpError(409, 'ФОП одержувача в архіві', 'RECIPIENT_ARCHIVED');
     const fop = await prisma.ourFop.findUnique({ where: { id: input.fopId } });
     if (!fop) throw new HttpError(400, 'Оберіть постачальника', 'FOP_NOT_FOUND');
 
@@ -88,6 +90,12 @@ export function createDocumentService(deps: { prisma: PrismaClient; sd: SalesDri
               date: toDb(input.date), fopId: fop.id, clientFopId: client.id, sdOrderId: input.sdOrderId, createdById: input.userId,
             },
           });
+      // remember the recipient for this SalesDrive contact (suggested next time)
+      await tx.contactDefault.upsert({
+        where: { sdContactId: order.contactId },
+        create: { sdContactId: order.contactId, clientFopId: client.id },
+        update: { clientFopId: client.id },
+      });
       await tx.documentVersion.create({
         data: { documentId: doc.id, linesJson: lines as unknown as Prisma.InputJsonValue, totalsJson: totals, headerJson: header, createdById: input.userId },
       });
@@ -108,6 +116,12 @@ export function createDocumentService(deps: { prisma: PrismaClient; sd: SalesDri
         if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') return generateOnce(input);
         throw e;
       }
+    },
+
+    /** Last recipient FOP chosen for a SalesDrive contact, unless it has been archived since. */
+    async defaultRecipientFor(sdContactId: number): Promise<number | null> {
+      const d = await prisma.contactDefault.findUnique({ where: { sdContactId }, include: { clientFop: true } });
+      return d && !d.clientFop.archived ? d.clientFopId : null;
     },
 
     async downloadDocument(id: number): Promise<{ file: Buffer; filename: string }> {
@@ -131,14 +145,14 @@ export function createDocumentService(deps: { prisma: PrismaClient; sd: SalesDri
       const q = opts.q?.trim();
       const n = q && /^\d+$/.test(q) ? Number(q) : undefined;
       const docs = await prisma.document.findMany({
-        where: q ? { OR: [...(n ? [{ number: n }, { sdOrderId: n }] : []), { clientFop: { name: { contains: q, mode: 'insensitive' as const } } }] } : undefined,
-        include: { clientFop: true, fop: true, createdBy: true, versions: { orderBy: { id: 'desc' }, take: 1, select: { totalsJson: true, createdAt: true } } },
+        where: q ? { OR: [...(n ? [{ number: n }, { sdOrderId: n }] : []), { clientFop: { name: { contains: q, mode: 'insensitive' as const } } }, { clientFop: { client: { name: { contains: q, mode: 'insensitive' as const } } } }] } : undefined,
+        include: { clientFop: { include: { client: true } }, fop: true, createdBy: true, versions: { orderBy: { id: 'desc' }, take: 1, select: { totalsJson: true, createdAt: true } } },
         orderBy: { updatedAt: 'desc' },
         take: opts.take ?? 200,
       });
       return docs.map(d => ({
         id: d.id, type: d.type, number: d.number, date: isoDate(fromDb(d.date)), sdOrderId: d.sdOrderId, status: d.status,
-        clientName: d.clientFop.name, fopName: d.fop.name, createdBy: d.createdBy.login,
+        clientName: `${d.clientFop.client.name} — ${d.clientFop.name}`, fopName: d.fop.name, createdBy: d.createdBy.login,
         netKop: (d.versions[0]?.totalsJson as DocTotals | undefined)?.netKop ?? 0,
         updatedAt: d.versions[0]?.createdAt ?? d.updatedAt,
       }));

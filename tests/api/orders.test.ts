@@ -5,7 +5,7 @@ import { hashPassword } from '../../src/auth/password';
 import { POST as login } from '../../app/api/auth/login/route';
 import { GET as getOrder } from '../../app/api/orders/[id]/route';
 import { POST as generate, GET as list } from '../../app/api/documents/route';
-import { PUT as saveClient } from '../../app/api/client-fops/route';
+import { createClientService } from '../../src/services/clients';
 
 const req = (url: string, init: RequestInit = {}, cookie = '') =>
   new Request(`http://localhost${url}`, { ...init, headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) } });
@@ -43,21 +43,22 @@ describe('orders & documents API (SalesDrive mock)', () => {
     expect(j.mix[0].colours).toHaveLength(4);
     expect(j.defaultFopId).toBe(fopId);
     expect(j.defaultDate).toBe('2026-11-12');
-    expect(j.recipient).toBeNull();
+    expect(j.defaultRecipientFopId).toBeNull();
+    expect(j.recipients).toEqual([]);
   });
 
-  it('recipient requisites: blocked → saved → used automatically; mix split 6/6/6/6 → 71 lines', async () => {
+  it('recipient chosen from the directory: required → chosen → remembered; mix split 6/6/6/6 → 71 lines', async () => {
     const body = { type: 'NAKLADNA', sdOrderId: 54969, fopId, date: '2026-11-12', splits: [{ lineIndex: 0, parts: ['c1', 'c2', 'c3', 'c4'].map(variantId => ({ variantId, qty: 6 })) }] };
     const blocked = await generate(req('/api/documents', { method: 'POST', body: JSON.stringify(body) }, cookie));
-    expect(blocked.status).toBe(409);
-    expect(await blocked.json()).toMatchObject({ code: 'RECIPIENT_REQUISITES_MISSING' });
+    expect(blocked.status).toBe(400);
+    expect(await blocked.json()).toMatchObject({ code: 'RECIPIENT_REQUIRED', error: 'Оберіть одержувача' });
 
-    const saved = await saveClient(req('/api/client-fops', { method: 'PUT', body: JSON.stringify({ sdContactId: 40001, name: 'ФОП Демо Клієнт', requisites: 'ІПН 1111111111' }) }, cookie));
-    expect(saved.status).toBe(200);
-    const again = await getOrder(req('/api/orders/54969', {}, cookie), params('54969'));
-    expect((await again.json()).recipient).toMatchObject({ name: 'ФОП Демо Клієнт' });
+    const c = await createClientService(prisma).createClient({ name: 'Демо', fop: { name: 'ФОП Демо Клієнт', requisites: 'ІПН 1111111111' } });
+    const recipientFopId = c.fops[0]!.id;
+    const preview = await (await getOrder(req('/api/orders/54969', {}, cookie), params('54969'))).json();
+    expect(preview.recipients).toEqual([expect.objectContaining({ id: recipientFopId, clientName: 'Демо', fopName: 'ФОП Демо Клієнт' })]);
 
-    const ok = await generate(req('/api/documents', { method: 'POST', body: JSON.stringify(body) }, cookie));
+    const ok = await generate(req('/api/documents', { method: 'POST', body: JSON.stringify({ ...body, recipientFopId }) }, cookie));
     expect(ok.status).toBe(200);
     expect(decodeURIComponent(ok.headers.get('x-filename')!)).toBe('Видаткова_накладна_54969_2026-11-12.xlsx');
     const wb = new ExcelJS.Workbook(); await wb.xlsx.load(Buffer.from(await ok.arrayBuffer()) as any);
@@ -65,13 +66,15 @@ describe('orders & documents API (SalesDrive mock)', () => {
     wb.worksheets[0]!.eachRow(r => { if (/^\d+$/.test(String(r.getCell(1).text)) && String(r.getCell(2).text) !== '') productRows++; });
     expect(productRows).toBe(71);
 
+    const again = await (await getOrder(req('/api/orders/54969', {}, cookie), params('54969'))).json();
+    expect(again.defaultRecipientFopId).toBe(recipientFopId);
     const hist = await (await list(req('/api/documents', {}, cookie))).json();
-    expect(hist[0]).toMatchObject({ type: 'NAKLADNA', number: 54969, clientName: 'ФОП Демо Клієнт' });
+    expect(hist[0]).toMatchObject({ type: 'NAKLADNA', number: 54969, clientName: 'Демо — ФОП Демо Клієнт' });
   });
 
   it('bad split → 422 with code; bad body → 400', async () => {
-    await prisma.clientFop.create({ data: { sdContactId: 40001, name: 'ФОП Демо', requisites: 'ІПН 1' } });
-    const r = await generate(req('/api/documents', { method: 'POST', body: JSON.stringify({ type: 'RAHUNOK', sdOrderId: 54969, fopId, date: '2026-11-12', splits: [{ lineIndex: 0, parts: [{ variantId: 'c1', qty: 5 }] }] }) }, cookie));
+    const recipientFopId = (await createClientService(prisma).createClient({ name: 'Демо', fop: { name: 'ФОП Демо', requisites: 'ІПН 1' } })).fops[0]!.id;
+    const r = await generate(req('/api/documents', { method: 'POST', body: JSON.stringify({ type: 'RAHUNOK', sdOrderId: 54969, fopId, recipientFopId, date: '2026-11-12', splits: [{ lineIndex: 0, parts: [{ variantId: 'c1', qty: 5 }] }] }) }, cookie));
     expect(r.status).toBe(422);
     expect(await r.json()).toMatchObject({ code: 'SPLIT_SUM_MISMATCH', error: '«Ніблер (Мікс) (0001)»: розбито 5 з 24' });
     const bad = await generate(req('/api/documents', { method: 'POST', body: JSON.stringify({ type: 'X' }) }, cookie));

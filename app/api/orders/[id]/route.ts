@@ -4,6 +4,8 @@ import { HttpError, jsonResponse, route } from '@/http/errors';
 import { intParam } from '@/http/params';
 import { salesDrive } from '@/salesdrive/fromEnv';
 import { isMixLine } from '@/domain/buildDocument';
+import { createClientService } from '@/services/clients';
+import { documentService } from '@/services';
 
 /** Order preview for the "Новий документ" screen: lines, recipient requisites, colour variants of Mix lines, defaults. */
 export const GET = route(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -19,8 +21,9 @@ export const GET = route(async (req: Request, ctx: { params: Promise<{ id: strin
     return colours.length ? { lineIndex: i, colours } : null;
   }));
 
-  const [recipient, fops, docs] = await Promise.all([
-    prisma.clientFop.findUnique({ where: { sdContactId: order.contactId } }),
+  const [recipients, defaultRecipientFopId, fops, docs] = await Promise.all([
+    createClientService(prisma).recipientOptions(),
+    documentService().defaultRecipientFor(order.contactId),
     prisma.ourFop.findMany({ orderBy: { id: 'asc' } }),
     prisma.document.findMany({ where: { sdOrderId: id }, select: { id: true, type: true, number: true, status: true } }),
   ]);
@@ -28,7 +31,8 @@ export const GET = route(async (req: Request, ctx: { params: Promise<{ id: strin
 
   return jsonResponse({
     order,
-    recipient,
+    recipients,
+    defaultRecipientFopId,
     mix: mix.filter(Boolean),
     fops: fops.map(f => ({ id: f.id, name: f.name })),
     defaultFopId: defaultFop?.id ?? null,

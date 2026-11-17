@@ -15,6 +15,7 @@ const Body = z.object({
   type: z.enum(['RAHUNOK', 'NAKLADNA']),
   sdOrderId: z.number().int().positive(),
   fopId: z.number().int().positive(),
+  recipientFopId: z.number().int().positive().optional(),
   date: z.string(),
   splits: z.array(z.object({ lineIndex: z.number().int().min(0), parts: z.array(z.object({ variantId: z.string().min(1), qty: z.number().min(0) })) })).default([]),
 });

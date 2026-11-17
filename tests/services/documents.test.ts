@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import ExcelJS from 'exceljs';
 import { prisma, resetDb, makeFop } from '../setup/db';
 import { createDocumentService, parseDocDate, partyText } from '../../src/services/documents';
+import { createClientService } from '../../src/services/clients';
 import type { SalesDriveClient } from '../../src/salesdrive/client';
 import type { SdOrder, SdProduct } from '../../src/domain/types';
 
@@ -28,16 +29,17 @@ function fakeSd(orders: Record<number, SdOrder>): SalesDriveClient {
 }
 
 describe('document service', () => {
-  let fopId: number, userId: number, svc: ReturnType<typeof createDocumentService>;
-  const base = { fopId: 0, date: parseDocDate('2026-11-12'), splits: [], userId: 0 };
+  let fopId: number, userId: number, recipientFopId: number, svc: ReturnType<typeof createDocumentService>;
+  const base = { fopId: 0, recipientFopId: 0, date: parseDocDate('2026-11-12'), splits: [], userId: 0 };
+  const clients = createClientService(prisma);
 
   beforeEach(async () => {
     await resetDb();
     fopId = (await makeFop('ФОП Кузнецов', true)).id;
     userId = (await prisma.user.create({ data: { login: 'm', passwordHash: 'x' } })).id;
-    await prisma.clientFop.create({ data: { sdContactId: 500, name: 'ФОП Палій Анна', requisites: 'ІПН 0987654321' } });
-    svc = createDocumentService({ prisma, sd: fakeSd({ 54969: mkOrder(54969), 54970: mkOrder(54970), 54971: mkOrder(54971, { contactId: 999 }), 54972: mkOrder(54972, { paymentAmount: 1 }) }) });
-    Object.assign(base, { fopId, userId });
+    recipientFopId = (await clients.createClient({ name: 'Палій', fop: { name: 'ФОП Палій Анна', requisites: 'ІПН 0987654321' } })).fops[0]!.id;
+    svc = createDocumentService({ prisma, sd: fakeSd({ 54969: mkOrder(54969), 54970: mkOrder(54970), 54972: mkOrder(54972, { paymentAmount: 1 }) }) });
+    Object.assign(base, { fopId, userId, recipientFopId });
   });
   afterAll(() => prisma.$disconnect());
 
@@ -85,8 +87,34 @@ describe('document service', () => {
     expect((await svc.generateDocument({ ...base, type: 'NAKLADNA', sdOrderId: 54969, fopId: other })).number).toBe(54969);
   });
 
-  it('missing recipient requisites → RECIPIENT_REQUISITES_MISSING', async () => {
-    await expect(svc.generateDocument({ ...base, type: 'NAKLADNA', sdOrderId: 54971 })).rejects.toMatchObject({ code: 'RECIPIENT_REQUISITES_MISSING' });
+  it('recipient: required, must exist and not be archived', async () => {
+    await expect(svc.generateDocument({ ...base, type: 'NAKLADNA', sdOrderId: 54969, recipientFopId: 0 })).rejects.toMatchObject({ code: 'RECIPIENT_REQUIRED', status: 400 });
+    await expect(svc.generateDocument({ ...base, type: 'NAKLADNA', sdOrderId: 54969, recipientFopId: 99999 })).rejects.toMatchObject({ code: 'RECIPIENT_NOT_FOUND', status: 404 });
+    await clients.updateFop(recipientFopId, { archived: true });
+    await expect(svc.generateDocument({ ...base, type: 'NAKLADNA', sdOrderId: 54969 })).rejects.toMatchObject({ code: 'RECIPIENT_ARCHIVED', status: 409 });
+  });
+
+  it('remembers the chosen recipient for the SalesDrive contact', async () => {
+    expect(await svc.defaultRecipientFor(500)).toBeNull();
+    await svc.generateDocument({ ...base, type: 'NAKLADNA', sdOrderId: 54969 });
+    expect(await svc.defaultRecipientFor(500)).toBe(recipientFopId);
+    const c2 = await clients.createClient({ name: 'BabyTop', fop: { name: 'ФОП Іваненко І.І.', requisites: 'ІПН 1234567890' } });
+    await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54970, recipientFopId: c2.fops[0]!.id });
+    expect(await svc.defaultRecipientFor(500)).toBe(c2.fops[0]!.id);
+    await clients.updateFop(c2.fops[0]!.id, { archived: true });
+    expect(await svc.defaultRecipientFor(500)).toBeNull(); // archived default is not suggested
+  });
+
+  it('regeneration may switch the recipient; number kept, header snapshot updated', async () => {
+    const a = await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54969 });
+    const c2 = await clients.createClient({ name: 'BabyTop', fop: { name: 'ФОП Іваненко І.І.', requisites: 'ІПН 1234567890' } });
+    const b = await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54969, recipientFopId: c2.fops[0]!.id });
+    expect([b.documentId, b.number]).toEqual([a.documentId, a.number]);
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: a.documentId } })).clientFopId).toBe(c2.fops[0]!.id);
+    const v = await prisma.documentVersion.findFirstOrThrow({ where: { documentId: a.documentId }, orderBy: { id: 'desc' } });
+    expect((v.headerJson as { recipient: string }).recipient).toContain('ФОП Іваненко І.І.');
+    const [row] = await svc.listDocuments({ q: 'babytop' });
+    expect(row).toMatchObject({ clientName: 'BabyTop — ФОП Іваненко І.І.', number: a.number });
   });
 
   it('order not found → ORDER_NOT_FOUND (404)', async () => {
@@ -146,7 +174,7 @@ describe('document service', () => {
     const a = await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54969, date: parseDocDate('2026-12-01') });
     expect(a.number).toBe(1);
     const [row] = await svc.listDocuments();
-    expect(row).toMatchObject({ number: 1, date: '2026-12-01', type: 'RAHUNOK', sdOrderId: 54969, clientName: 'ФОП Палій Анна', status: 'ACTIVE' });
+    expect(row).toMatchObject({ number: 1, date: '2026-12-01', type: 'RAHUNOK', sdOrderId: 54969, clientName: 'Палій — ФОП Палій Анна', status: 'ACTIVE' });
     const f = await svc.downloadDocument(a.documentId);
     expect(f.filename).toBe('Рахунок-фактура_1_2026-12-01.xlsx');
     expect(f.file.length).toBeGreaterThan(1000);
