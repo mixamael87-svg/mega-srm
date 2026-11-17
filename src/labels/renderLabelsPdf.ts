@@ -66,8 +66,16 @@ function newDoc(font: Buffer) {
   doc.font('label');
   return doc;
 }
+/** Paragraphs are measured and drawn one by one: pdfkit counts a "\n" glyph into the line width,
+ * which shifts centred lines left and can add an empty line. An empty paragraph = one blank line. */
+const paragraphHeight = (doc: PDFKit.PDFDocument, p: string, width: number) =>
+  p.trim() ? doc.heightOfString(p, { width, lineGap: 0 }) : doc.currentLineHeight(true);
 const measurer = (doc: PDFKit.PDFDocument): Measure => {
-  const m: Measure = (text, size, width) => (text ? doc.fontSize(size).heightOfString(text, { width, lineGap: 0 }) : 0);
+  const m: Measure = (text, size, width) => {
+    if (!text) return 0;
+    doc.fontSize(size);
+    return text.split('\n').reduce((h, p) => h + paragraphHeight(doc, p, width), 0);
+  };
   m.wordWidth = (word, size) => doc.fontSize(size).widthOfString(word);
   return m;
 };
@@ -98,11 +106,10 @@ function layout(c: LabelContent, m: Measure): Layout {
   const { head, body } = splitHead(c);
   const a = area(c);
   const headW = c.align === 'center' ? TEXT_WIDTH_PT - 2 * (MARK + 1) : TEXT_WIDTH_PT - (MARK + 1);
-  // pdfkit measures a line-ending word together with its "\n" glyph, and a word that then overflows gets a
-  // phantom empty line after it: every word plus that glyph must fit the width
-  const words = c.text.split(/[ \t]+|(?<=\n)/).filter(w => w.trim());
+  // a word wider than the line would be broken mid-word: keep every word within the width
+  const words = c.text.split(/\s+/).filter(Boolean);
   const wordsFit = (size: number, scale: number) =>
-    !m.wordWidth || words.every(w => m.wordWidth!(w.endsWith('\n') ? w : w + '\n', size) * scale / 100 <= TEXT_WIDTH_PT - 1);
+    !m.wordWidth || words.every(w => m.wordWidth!(w, size) * scale / 100 <= TEXT_WIDTH_PT - 1);
   const heights = (size: number, scale: number) => {
     const k = 100 / scale; // wrap in a wider box, draw squeezed horizontally
     const headH = c.showMark ? Math.max(m(head, size, headW * k), MARK) : 0;
@@ -171,7 +178,12 @@ function drawText(doc: PDFKit.PDFDocument, text: string, x: number, y: number, w
   const k = scale / 100;
   doc.save();
   doc.transform(k, 0, 0, 1, x, 0); // squeeze horizontally around the box's left edge
-  doc.fillColor('black').fontSize(size).text(text, 0, y, { width: w / k, align, lineGap: 0 });
+  doc.fillColor('black').fontSize(size);
+  let yy = y;
+  for (const p of text.split('\n')) {
+    if (p.trim()) doc.text(p, 0, yy, { width: w / k, align, lineGap: 0 });
+    yy += paragraphHeight(doc, p, w / k);
+  }
   doc.restore();
 }
 

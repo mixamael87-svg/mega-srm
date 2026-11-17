@@ -57,9 +57,9 @@ def barcode_rows(a):
 
 
 def find_mark(a, tmpl):
-    """Best match of the mark in the top-right corner; returns (score, box)."""
+    """Best match of the mark in the right half above the barcode; returns (score, box)."""
     h, w = a.shape
-    region = a[: int(h * 0.3), int(w * 0.6):]
+    region = a[: int(h * 0.75), int(w * 0.6):]
     best = (0.0, None)
     for size in (80, 100, 125, 150, 180, 220, 260):
         t = np.asarray(tmpl.resize((round(size * tmpl.width / tmpl.height), size), Image.LANCZOS), dtype=np.float32)
