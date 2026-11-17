@@ -67,7 +67,7 @@ model ClientFop {
   requisites String  @db.Text
   archived   Boolean @default(false)
 
-  client    Client           @relation(fields: [clientId], references: [id])
+  client    Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
   documents Document[]
   defaults  ContactDefault[]
 
@@ -80,7 +80,7 @@ model ContactDefault {
   clientFopId Int
   updatedAt   DateTime @updatedAt
 
-  clientFop ClientFop @relation(fields: [clientFopId], references: [id])
+  clientFop ClientFop @relation(fields: [clientFopId], references: [id], onDelete: Cascade)
 }
 
 /// Счётчик номеров рахунків: (наш ФОП × год × месяц)
@@ -101,7 +101,8 @@ model Document {
   number      Int
   date        DateTime  @db.Date
   fopId       Int
-  clientFopId Int
+  /// null after the recipient client/FOP was deleted; the recipient text stays in DocumentVersion.headerJson
+  clientFopId Int?
   sdOrderId   Int
   status      DocStatus @default(ACTIVE)
   createdById Int
@@ -109,7 +110,7 @@ model Document {
   updatedAt   DateTime  @updatedAt
 
   fop       OurFop            @relation(fields: [fopId], references: [id])
-  clientFop ClientFop         @relation(fields: [clientFopId], references: [id])
+  clientFop ClientFop?        @relation(fields: [clientFopId], references: [id], onDelete: SetNull)
   createdBy User              @relation(fields: [createdById], references: [id])
   versions  DocumentVersion[]
 

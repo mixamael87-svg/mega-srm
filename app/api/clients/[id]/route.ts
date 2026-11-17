@@ -12,3 +12,10 @@ export const PATCH = route(async (req: Request, ctx: { params: Promise<{ id: str
   const id = intParam((await ctx.params).id);
   return jsonResponse(await createClientService(prisma).updateClient(id, Body.parse(await req.json())));
 });
+
+/** Delete a client with all its FOPs for good — admin only. Documents stay in history. */
+export const DELETE = route(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  await requireUser(req, 'admin');
+  await createClientService(prisma).deleteClient(intParam((await ctx.params).id));
+  return jsonResponse({ ok: true });
+});

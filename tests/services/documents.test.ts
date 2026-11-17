@@ -117,6 +117,21 @@ describe('document service', () => {
     expect(row).toMatchObject({ clientName: 'BabyTop — ФОП Іваненко І.І.', number: a.number });
   });
 
+  it('deleting the recipient client keeps documents: file downloads, history shows «(видалено)», regeneration picks a new recipient', async () => {
+    const a = await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54969 });
+    const fop = await prisma.clientFop.findUniqueOrThrow({ where: { id: recipientFopId } });
+    expect(await clients.usage(fop.clientId)).toEqual({ fops: 1, documents: 1 });
+    await clients.deleteClient(fop.clientId);
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: a.documentId } })).clientFopId).toBeNull();
+    expect(await svc.defaultRecipientFor(500)).toBeNull();
+    const [row] = await svc.listDocuments();
+    expect(row).toMatchObject({ number: 1, clientName: 'ФОП Палій Анна (видалено)' });
+    expect((await svc.downloadDocument(a.documentId)).file.length).toBeGreaterThan(1000);
+    const c2 = await clients.createClient({ name: 'BabyTop', fop: { name: 'ФОП Іваненко І.І.', requisites: 'ІПН 1234567890' } });
+    const b = await svc.generateDocument({ ...base, type: 'RAHUNOK', sdOrderId: 54969, recipientFopId: c2.fops[0]!.id });
+    expect([b.documentId, b.number]).toEqual([a.documentId, 1]);
+  });
+
   it('order not found → ORDER_NOT_FOUND (404)', async () => {
     await expect(svc.generateDocument({ ...base, type: 'NAKLADNA', sdOrderId: 1 })).rejects.toMatchObject({ code: 'ORDER_NOT_FOUND', status: 404 });
   });

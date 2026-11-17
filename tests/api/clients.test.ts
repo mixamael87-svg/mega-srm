@@ -3,9 +3,10 @@ import { prisma, resetDb } from '../setup/db';
 import { hashPassword } from '../../src/auth/password';
 import { POST as login } from '../../app/api/auth/login/route';
 import { GET as listClients, POST as createClient } from '../../app/api/clients/route';
-import { PATCH as patchClient } from '../../app/api/clients/[id]/route';
+import { PATCH as patchClient, DELETE as deleteClient } from '../../app/api/clients/[id]/route';
+import { GET as clientUsage } from '../../app/api/clients/[id]/usage/route';
 import { POST as addFop } from '../../app/api/clients/[id]/fops/route';
-import { PATCH as patchFop } from '../../app/api/client-fops/[id]/route';
+import { PATCH as patchFop, DELETE as deleteFop } from '../../app/api/client-fops/[id]/route';
 
 const req = (url: string, init: RequestInit = {}, cookie = '') =>
   new Request(`http://localhost${url}`, { ...init, headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) } });
@@ -54,5 +55,18 @@ describe('clients API', () => {
     expect((await addFop(req('/api/clients/99999/fops', json({ name: 'a', requisites: 'b' }), cookie), params(99999))).status).toBe(404);
     expect((await patchClient(req('/api/clients/abc', patch({ name: 'a' }), cookie), params('abc'))).status).toBe(400);
     expect((await createClient(req('/api/clients', { method: 'POST', body: '{"name":' }, cookie))).status).toBe(400);
+  });
+
+  it('delete: manager → 403, admin → 200; usage for the warning text', async () => {
+    const client = await (await createClient(req('/api/clients', json({ name: 'BabyTop', fop: { name: 'ФОП Іваненко', requisites: 'ІПН 1' } }), cookie))).json();
+    const del = { method: 'DELETE' };
+    expect((await deleteClient(req(`/api/clients/${client.id}`, del, cookie), params(client.id))).status).toBe(403);
+    expect((await deleteFop(req(`/api/client-fops/${client.fops[0].id}`, del, cookie), params(client.fops[0].id))).status).toBe(403);
+    await prisma.user.create({ data: { login: 'boss', passwordHash: await hashPassword('adminpass1'), role: 'admin' } });
+    const admin = (( await login(req('/api/auth/login', json({ login: 'boss', password: 'adminpass1' })))).headers.get('set-cookie') ?? '').split(';')[0]!;
+    expect(await (await clientUsage(req(`/api/clients/${client.id}/usage`, {}, admin), params(client.id))).json()).toEqual({ fops: 1, documents: 0 });
+    expect((await deleteClient(req(`/api/clients/${client.id}`, del, admin), params(client.id))).status).toBe(200);
+    expect((await deleteClient(req(`/api/clients/${client.id}`, del, admin), params(client.id))).status).toBe(404);
+    expect(await (await listClients(req('/api/clients?archived=1', {}, admin))).json()).toEqual([]);
   });
 });

@@ -13,3 +13,16 @@ export const PATCH = route(async (req: Request, ctx: { params: Promise<{ id: str
   const id = intParam((await ctx.params).id);
   return jsonResponse(await createClientService(prisma).updateFop(id, Body.parse(await req.json())));
 });
+
+/** Usage for the delete warning: GET → { documents }. */
+export const GET = route(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  await requireUser(req);
+  return jsonResponse(await createClientService(prisma).fopUsage(intParam((await ctx.params).id)));
+});
+
+/** Delete a FOP for good — admin only. Documents stay in history. */
+export const DELETE = route(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  await requireUser(req, 'admin');
+  await createClientService(prisma).deleteFop(intParam((await ctx.params).id));
+  return jsonResponse({ ok: true });
+});

@@ -67,6 +67,29 @@ export function createClientService(prisma: PrismaClient) {
       return prisma.clientFop.update({ where: { id }, data, select: fopSelect }).catch(e => notFound(e, 'ФОП не знайдено'));
     },
 
+    /** Numbers for the delete warning: FOPs of the client and documents issued to them. */
+    async usage(clientId: number): Promise<{ fops: number; documents: number }> {
+      const c = await prisma.client.findUnique({ where: { id: clientId }, select: { _count: { select: { fops: true } } } });
+      if (!c) throw new HttpError(404, 'Клієнта не знайдено');
+      const documents = await prisma.document.count({ where: { clientFop: { clientId } } });
+      return { fops: c._count.fops, documents };
+    },
+
+    async fopUsage(id: number): Promise<{ documents: number }> {
+      const f = await prisma.clientFop.findUnique({ where: { id }, select: { _count: { select: { documents: true } } } });
+      if (!f) throw new HttpError(404, 'ФОП не знайдено');
+      return { documents: f._count.documents };
+    },
+
+    /** Delete for good (admin): FOPs and remembered defaults go with it; documents keep their header snapshot. */
+    async deleteClient(id: number): Promise<void> {
+      await prisma.client.delete({ where: { id } }).catch(e => notFound(e, 'Клієнта не знайдено'));
+    },
+
+    async deleteFop(id: number): Promise<void> {
+      await prisma.clientFop.delete({ where: { id } }).catch(e => notFound(e, 'ФОП не знайдено'));
+    },
+
     /** Active (not archived) FOPs for the recipient picker, sorted by client then FOP. */
     async recipientOptions(): Promise<RecipientOption[]> {
       const fops = await prisma.clientFop.findMany({

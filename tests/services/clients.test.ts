@@ -59,4 +59,19 @@ describe('clients directory', () => {
     await expect(svc.addFop(99999, { name: 'a', requisites: 'b' })).rejects.toMatchObject({ status: 404 });
     await expect(svc.updateClient(99999, { name: 'a' })).rejects.toMatchObject({ status: 404 });
   });
+
+  it('usage counts and delete: client with FOPs disappears entirely; unknown ids → 404', async () => {
+    const c = await babytop();
+    const f2 = await svc.addFop(c.id, { name: 'ФОП Петренко П.П.', requisites: 'ІПН 0987654321' });
+    expect(await svc.usage(c.id)).toEqual({ fops: 2, documents: 0 });
+    expect(await svc.fopUsage(f2.id)).toEqual({ documents: 0 });
+    await svc.deleteFop(f2.id);
+    expect((await svc.listClients({ includeArchived: true }))[0]!.fops).toHaveLength(1);
+    await svc.deleteClient(c.id);
+    expect(await svc.listClients({ includeArchived: true })).toEqual([]);
+    expect(await prisma.clientFop.count()).toBe(0);
+    await expect(svc.deleteClient(c.id)).rejects.toMatchObject({ status: 404 });
+    await expect(svc.deleteFop(99999)).rejects.toMatchObject({ status: 404 });
+    await expect(svc.usage(99999)).rejects.toMatchObject({ status: 404 });
+  });
 });

@@ -12,13 +12,18 @@ async function send(url: string, method: 'POST' | 'PATCH', body: unknown): Promi
   return j.issues?.[0]?.message ?? j.error ?? 'Помилка';
 }
 
-export function ClientsClient() {
+type PendingDelete = { kind: 'client' | 'fop'; id: number; name: string; text: string };
+
+const docsWord = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'документ' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'документи' : 'документів');
+
+export function ClientsClient({ isAdmin }: { isAdmin: boolean }) {
   const [clients, setClients] = useState<Client[]>([]);
   const [q, setQ] = useState('');
   const [archived, setArchived] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
   const [edit, setEdit] = useState<string | null>(null); // 'client:ID' | 'fop:ID' | 'addfop:ID' | 'new'
   const [error, setError] = useState('');
+  const [pending, setPending] = useState<PendingDelete | null>(null);
 
   const load = async (query = q, arch = archived) => {
     const params = new URLSearchParams();
@@ -36,6 +41,24 @@ export function ClientsClient() {
     setEdit(null);
     await load();
     return true;
+  }
+  /** Step 1 of 2: show the warning panel with what will be deleted. */
+  async function askDelete(kind: 'client' | 'fop', id: number, name: string) {
+    setError('');
+    const res = await fetch(kind === 'client' ? `/api/clients/${id}/usage` : `/api/client-fops/${id}`);
+    const u = await res.json().catch(() => ({}));
+    if (!res.ok) { setError(u.error ?? 'Помилка'); return; }
+    const docs = u.documents ? ` По ньому є ${u.documents} ${docsWord(u.documents)} — вони залишаться в історії, але без зв'язку з клієнтом.` : ' Документів по ньому немає.';
+    const what = kind === 'client' ? `клієнта «${name}» і ${u.fops} ФОП` : `ФОП «${name}»`;
+    setPending({ kind, id, name, text: `Видалити ${what}?${docs}` });
+  }
+  /** Step 2 of 2: final browser confirmation, then delete. */
+  async function doDelete(p: PendingDelete) {
+    if (!confirm(`Остаточно видалити ${p.kind === 'client' ? 'клієнта' : 'ФОП'} «${p.name}»? Це не можна скасувати.`)) return;
+    const res = await fetch(p.kind === 'client' ? `/api/clients/${p.id}` : `/api/client-fops/${p.id}`, { method: 'DELETE' });
+    setPending(null);
+    if (!res.ok) { setError((await res.json().catch(() => ({}))).error ?? 'Помилка'); return; }
+    await load();
   }
   const fd = (e: React.FormEvent<HTMLFormElement>) => { e.preventDefault(); return new FormData(e.currentTarget); };
 
@@ -68,6 +91,15 @@ export function ClientsClient() {
         <label style={{ marginBottom: 8 }}><input type="checkbox" checked={archived} onChange={e => { setArchived(e.target.checked); void load(q, e.target.checked); }} /> показати архівні ФОП</label>
       </form>
       {error && <div className="card error" role="status">{error}</div>}
+      {pending && (
+        <div className="card" role="alertdialog" style={{ borderColor: 'var(--warn)', background: '#fbeee9' }}>
+          <div className="error" style={{ marginTop: 0, marginBottom: 10 }}>{pending.text}</div>
+          <div className="row">
+            <button className="primary" style={{ background: 'var(--warn)', borderColor: 'var(--warn)' }} onClick={() => doDelete(pending)}>Так, видалити</button>
+            <button onClick={() => setPending(null)}>Скасувати</button>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         {clients.length === 0 && <div className="muted">Клієнтів не знайдено</div>}
@@ -87,6 +119,7 @@ export function ClientsClient() {
                     <span className="muted" style={{ fontWeight: 400 }}>{c.phone && ` · ${c.phone}`} · {c.fops.length} ФОП{c.comment && ` · ${c.comment}`}</span>
                   </button>
                   <button onClick={() => { setEdit(`client:${c.id}`); setError(''); }}>Змінити</button>
+                  {isAdmin && <button onClick={() => askDelete('client', c.id, c.name)}>Видалити</button>}
                 </div>
               )}
 
@@ -102,6 +135,7 @@ export function ClientsClient() {
                       <div style={{ flex: 1, whiteSpace: 'pre-line' }}><b>{f.name}</b>{f.archived && <span className="pill annulled" style={{ marginLeft: 6 }}>архів</span>}{'\n'}<span className="muted">{f.requisites}</span></div>
                       <button onClick={() => { setEdit(`fop:${f.id}`); setError(''); }}>Змінити</button>
                       <button onClick={() => save(`/api/client-fops/${f.id}`, 'PATCH', { archived: !f.archived })}>{f.archived ? 'Повернути з архіву' : 'В архів'}</button>
+                      {isAdmin && <button onClick={() => askDelete('fop', f.id, f.name)}>Видалити</button>}
                     </div>
                   ))}
                   {edit === `addfop:${c.id}` ? (

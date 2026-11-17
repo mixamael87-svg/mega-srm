@@ -146,13 +146,15 @@ export function createDocumentService(deps: { prisma: PrismaClient; sd: SalesDri
       const n = q && /^\d+$/.test(q) ? Number(q) : undefined;
       const docs = await prisma.document.findMany({
         where: q ? { OR: [...(n ? [{ number: n }, { sdOrderId: n }] : []), { clientFop: { name: { contains: q, mode: 'insensitive' as const } } }, { clientFop: { client: { name: { contains: q, mode: 'insensitive' as const } } } }] } : undefined,
-        include: { clientFop: { include: { client: true } }, fop: true, createdBy: true, versions: { orderBy: { id: 'desc' }, take: 1, select: { totalsJson: true, createdAt: true } } },
+        include: { clientFop: { include: { client: true } }, fop: true, createdBy: true, versions: { orderBy: { id: 'desc' }, take: 1, select: { totalsJson: true, headerJson: true, createdAt: true } } },
         orderBy: { updatedAt: 'desc' },
         take: opts.take ?? 200,
       });
       return docs.map(d => ({
         id: d.id, type: d.type, number: d.number, date: isoDate(fromDb(d.date)), sdOrderId: d.sdOrderId, status: d.status,
-        clientName: `${d.clientFop.client.name} — ${d.clientFop.name}`, fopName: d.fop.name, createdBy: d.createdBy.login,
+        clientName: d.clientFop
+          ? `${d.clientFop.client.name} — ${d.clientFop.name}`
+          : `${((d.versions[0]?.headerJson as HeaderSnapshot | undefined)?.recipient ?? '').split('\n')[0] || 'Одержувач'} (видалено)`, fopName: d.fop.name, createdBy: d.createdBy.login,
         netKop: (d.versions[0]?.totalsJson as DocTotals | undefined)?.netKop ?? 0,
         updatedAt: d.versions[0]?.createdAt ?? d.updatedAt,
       }));

@@ -36,4 +36,17 @@ test('clients tab: client with two FOPs, search by ІПН, archive hides FOP fro
   await page.getByLabel('Одержувач').fill('babytop');
   await expect(page.getByRole('option', { name: /ФОП Іваненко І\.І\./ })).toBeVisible();
   await expect(page.getByRole('option', { name: /ФОП Петренко/ })).toHaveCount(0);
+
+  // delete for good, with two warnings (admin)
+  await page.getByRole('link', { name: 'Клієнти' }).click();
+  await page.getByRole('button', { name: 'Видалити', exact: true }).first().click();
+  await expect(page.getByRole('alertdialog')).toContainText('Видалити клієнта «BabyTop» і 2 ФОП? Документів по ньому немає.');
+  await page.getByRole('button', { name: 'Скасувати' }).click();
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Видалити', exact: true }).first().click();
+  let dialogText = '';
+  page.once('dialog', d => { dialogText = d.message(); void d.accept(); });
+  await page.getByRole('button', { name: 'Так, видалити' }).click();
+  await expect(page.getByText('BabyTop')).toHaveCount(0);
+  expect(dialogText).toBe('Остаточно видалити клієнта «BabyTop»? Це не можна скасувати.');
 });
