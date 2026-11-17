@@ -15,6 +15,7 @@ export const jsonResponse = (body: unknown, status = 200, headers?: HeadersInit)
 /** Maps known errors to JSON responses with a Ukrainian message; unknown errors → 500 without details. */
 export function errorResponse(e: unknown): Response {
   if (e instanceof HttpError) return jsonResponse({ error: e.message, ...(e.code ? { code: e.code } : {}) }, e.status);
+  if (e instanceof SyntaxError) return jsonResponse({ error: 'Невірні дані' }, 400); // malformed JSON body
   if (e instanceof ZodError) return jsonResponse({ error: 'Невірні дані', issues: e.issues.map(i => ({ path: i.path.join('.'), message: i.message })) }, 400);
   if (e instanceof DocumentBuildError) return jsonResponse({ error: e.message, code: e.code, details: e.details }, 422);
   if (e instanceof SalesDriveError) return jsonResponse({ error: e.message, code: 'SALESDRIVE' }, 502);

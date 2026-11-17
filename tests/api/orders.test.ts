@@ -76,5 +76,8 @@ describe('orders & documents API (SalesDrive mock)', () => {
     expect(await r.json()).toMatchObject({ code: 'SPLIT_SUM_MISMATCH', error: '«Ніблер (Мікс) (0001)»: розбито 5 з 24' });
     const bad = await generate(req('/api/documents', { method: 'POST', body: JSON.stringify({ type: 'X' }) }, cookie));
     expect(bad.status).toBe(400);
+    const broken = await generate(req('/api/documents', { method: 'POST', body: '{"type":"RAHUNOK",' }, cookie));
+    expect(broken.status).toBe(400);
+    expect(await broken.json()).toMatchObject({ error: 'Невірні дані' });
   });
 });
