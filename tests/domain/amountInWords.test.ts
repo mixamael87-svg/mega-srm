@@ -1,4 +1,4 @@
-import { describe, it, expect } from '../_vitest';
+import { describe, it, expect } from 'vitest';
 import { amountInWordsUah } from '../../src/domain/amountInWords';
 
 describe('amountInWordsUah', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from '../_vitest';
+import { describe, it, expect } from 'vitest';
 import { formatMoney, formatQty, formatDocDate } from '../../src/domain/format';
 
 describe('format', () => {

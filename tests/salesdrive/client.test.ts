@@ -1,6 +1,6 @@
-import { describe, it, expect } from '../_vitest';
+import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { createSalesDriveClient, SalesDriveError } from '../../src/salesdrive/client';
+import { createSalesDriveClient } from '../../src/salesdrive/client';
 
 const raw = readFileSync(new URL('../fixtures/sd-order-raw.json', import.meta.url), 'utf8');
 const yml = readFileSync(new URL('../fixtures/catalog.yml.xml', import.meta.url), 'utf8');
@@ -54,7 +54,7 @@ describe('getOrder', () => {
   });
   it('HTTP 401 → SalesDriveError(401)', async () => {
     const { f } = mockFetch(() => ({ status: 401, body: '{"status":"error","message":"bad key"}' }));
-    await expect(createSalesDriveClient(cfg(f)).getOrder(5)).rejects.toThrow((e: unknown) => e instanceof SalesDriveError && e.status === 401);
+    await expect(createSalesDriveClient(cfg(f)).getOrder(5)).rejects.toMatchObject({ name: 'SalesDriveError', status: 401 });
   });
   it('HTTP 429 → readable message', async () => {
     const { f } = mockFetch(() => ({ status: 429, body: '' }));
