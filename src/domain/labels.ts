@@ -8,7 +8,11 @@ export type LabelRecord = LabelContent & {
   noPrint: boolean;
   /** Printed right after this label for every unit (e.g. "частина 2" for the 1200 series). */
   extra: (LabelContent & { noPrint: boolean }) | null;
+  /** Title of `extra`, shown in the print list. */
+  extraTitle?: string | null;
 };
+/** One editable row of the print list. */
+export type LabelRow = { sku: string; name: string; qty: number; status: 'ok' | 'missing' | 'noPrint'; extra: string | null };
 export type SkippedItem = { sku: string; name: string; qty: number };
 export type LabelPlan = { pages: LabelContent[]; missing: SkippedItem[]; noPrint: SkippedItem[]; printedCount: number };
 
@@ -44,4 +48,30 @@ export function planLabels(lines: DocLine[], labels: LabelRecord[]): LabelPlan {
   }
   plan.printedCount = plan.pages.length;
   return plan;
+}
+
+function sumBySku(lines: Pick<DocLine, 'sku' | 'name' | 'qty'>[]): SkippedItem[] {
+  const items = new Map<string, SkippedItem>();
+  for (const l of lines) {
+    const it = items.get(l.sku);
+    if (it) it.qty += l.qty;
+    else items.set(l.sku, { sku: l.sku, name: l.name, qty: l.qty });
+  }
+  return [...items.values()].map(i => ({ ...i, qty: Math.ceil(i.qty) })).filter(i => i.qty > 0);
+}
+
+/** Print list for the confirmation dialog: one row per sku (colours summed), first-appearance order. */
+export function labelRows(lines: Pick<DocLine, 'sku' | 'name' | 'qty'>[], labels: LabelRecord[]): LabelRow[] {
+  const bySku = new Map(labels.filter(l => l.sku).map(l => [l.sku!, l]));
+  return sumBySku(lines).map(i => {
+    const l = bySku.get(i.sku);
+    const status = !l ? 'missing' : l.noPrint ? 'noPrint' : 'ok';
+    const extra = status === 'ok' && l!.extra && !l!.extra.noPrint ? (l!.extraTitle ?? 'додаткова') : null;
+    return { ...i, status, extra };
+  });
+}
+
+/** Pages for an edited print list: only labels of the set, never noPrint, quantities as given. */
+export function pagesForItems(items: { sku: string; qty: number }[], labels: LabelRecord[]): LabelContent[] {
+  return planLabels(items.map((i, n) => ({ no: n + 1, sku: i.sku, name: '', barcode: '', qty: i.qty, priceKop: 0, sumKop: 0 })), labels).pages;
 }

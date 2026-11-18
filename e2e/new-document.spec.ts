@@ -71,10 +71,11 @@ test('login → order 54969 → split Ніблер (Мікс) 6/6/6/6 → naklad
   await nakladna.getByRole('button', { name: 'Наклейки: Загальна' }).click();
   const dlg = page.getByRole('dialog');
   await expect(dlg).toContainText('Буде надруковано 3 наклейки');
-  await expect(dlg).toContainText('Немає наклейки');
+  await dlg.getByText(/^Не друкуються/).click();
+  await expect(dlg).toContainText('немає наклейки');
   await expect(dlg.getByRole('cell', { name: '0103', exact: true })).toBeVisible();
   const [pdf] = await Promise.all([
-    page.context().waitForEvent('response', r => /\/api\/documents\/\d+\/labels\?set=\d+&format=pdf$/.test(r.url())),
+    page.waitForResponse(r => /\/api\/label-sets\/\d+\/print$/.test(r.url())),
     dlg.getByRole('button', { name: 'Друкувати' }).click(),
   ]);
   expect(pdf.status()).toBe(200);

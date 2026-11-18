@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planLabels, type LabelRecord } from '../../src/domain/labels';
+import { planLabels, labelRows, pagesForItems, type LabelRecord } from '../../src/domain/labels';
 import type { DocLine } from '../../src/domain/types';
 
 let no = 0;
@@ -48,5 +48,29 @@ describe('planLabels', () => {
     expect(planLabels([line('0205', 1.5)], [label(1, '0205')]).pages).toHaveLength(2);
     const z = planLabels([line('0205', 0), line('0412', 0)], [label(1, '0205')]);
     expect(z).toEqual({ pages: [], missing: [], noPrint: [], printedCount: 0 });
+  });
+});
+
+describe('labelRows', () => {
+  const rec = (sku: string, o: Partial<LabelRecord> = {}): LabelRecord => ({ ...label(1, sku), ...o });
+  it('one row per sku, summed, in first-appearance order, with status and extra title', () => {
+    const rows = labelRows(
+      [line('0205', 3, 'Пляшка'), line('1205', 2, 'Пищалка'), line('0412', 1, 'Пустушка'), line('0205', 4), line('2004', 5, 'Кулька'), line('0300', 0)],
+      [rec('0205'), rec('1205', { extra: { ...content('Ч2'), noPrint: false }, extraTitle: 'Частина 2' }), rec('2004', { noPrint: true })],
+    );
+    expect(rows).toEqual([
+      { sku: '0205', name: 'Пляшка', qty: 7, status: 'ok', extra: null },
+      { sku: '1205', name: 'Пищалка', qty: 2, status: 'ok', extra: 'Частина 2' },
+      { sku: '0412', name: 'Пустушка', qty: 1, status: 'missing', extra: null },
+      { sku: '2004', name: 'Кулька', qty: 5, status: 'noPrint', extra: null },
+    ]);
+  });
+});
+
+describe('pagesForItems', () => {
+  it('prints edited quantities, skips unknown, noPrint and zero', () => {
+    const p = pagesForItems([{ sku: '0205', qty: 2 }, { sku: '0412', qty: 3 }, { sku: '2004', qty: 1 }, { sku: '0311', qty: 0 }, { sku: '0205', qty: 1 }],
+      [label(1, '0205'), label(2, '2004', null, true), label(3, '0311')]);
+    expect(p.map(x => x.text)).toEqual(['L0205', 'L0205', 'L0205']);
   });
 });

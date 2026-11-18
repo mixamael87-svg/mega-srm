@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient, type Label } from '@prisma/client';
 import { HttpError } from '../http/errors';
 import { ean13FromSku, isValidEan13 } from '../domain/barcode';
-import { planLabels, type LabelContent, type LabelPlan, type LabelRecord } from '../domain/labels';
+import { labelRows, pagesForItems, type LabelContent, type LabelRecord, type LabelRow } from '../domain/labels';
 import type { DocLine } from '../domain/types';
 import { labelFits } from '../labels/renderLabelsPdf';
 
@@ -59,6 +59,15 @@ export function createLabelService(prisma: PrismaClient) {
     if (extraLabelId === selfId) throw new HttpError(400, 'Наклейка не може бути додатковою сама до себе');
     const x = await prisma.label.findUnique({ where: { id: extraLabelId } });
     if (!x || x.setId !== setId) throw new HttpError(400, 'Додаткова наклейка має бути з того ж набору');
+  }
+  async function activeNakladna(documentId: number) {
+    const doc = await prisma.document.findUnique({
+      where: { id: documentId },
+      select: { type: true, status: true, number: true, versions: { orderBy: { id: 'desc' }, take: 1, select: { linesJson: true } } },
+    });
+    if (!doc) throw new HttpError(404, 'Документ не знайдено');
+    if (doc.type !== 'NAKLADNA' || doc.status !== 'ACTIVE') throw new HttpError(409, 'Наклейки друкуються лише з активної видаткової накладної', 'LABELS_NOT_ALLOWED');
+    return { number: doc.number, lines: (doc.versions[0]?.linesJson ?? []) as DocLine[] };
   }
   const dupSku = (sku: string | null) => new HttpError(400, `Наклейка з артикулом ${sku} вже є в цьому наборі`);
 
@@ -169,21 +178,28 @@ export function createLabelService(prisma: PrismaClient) {
       return rows.map(r => ({
         id: r.id, sku: r.sku, noPrint: r.noPrint, ...toContent(r),
         extra: r.extraLabel ? { ...toContent(r.extraLabel), noPrint: r.extraLabel.noPrint } : null,
+        extraTitle: r.extraLabel ? (r.extraLabel.title || r.extraLabel.sku) : null,
       }));
     },
     getSet,
 
-    /** What the set prints for a document: only an ACTIVE nakladna; lines from its latest version. */
-    async planForDocument(documentId: number, setId: number): Promise<{ setName: string; docNumber: number; plan: LabelPlan }> {
-      const doc = await prisma.document.findUnique({
-        where: { id: documentId },
-        select: { type: true, status: true, number: true, versions: { orderBy: { id: 'desc' }, take: 1, select: { linesJson: true } } },
-      });
-      if (!doc) throw new HttpError(404, 'Документ не знайдено');
-      if (doc.type !== 'NAKLADNA' || doc.status !== 'ACTIVE') throw new HttpError(409, 'Наклейки друкуються лише з активної видаткової накладної', 'LABELS_NOT_ALLOWED');
+    /** Editable print list for an ACTIVE nakladna (lines of its latest version). */
+    async rowsForDocument(documentId: number, setId: number): Promise<{ setName: string; title: string; rows: LabelRow[] }> {
+      const doc = await activeNakladna(documentId);
       const set = await getSet(setId);
-      const lines = (doc.versions[0]?.linesJson ?? []) as DocLine[];
-      return { setName: set.name, docNumber: doc.number, plan: planLabels(lines, await this.recordsForSet(setId)) };
+      return { setName: set.name, title: `накладна ${doc.number}`, rows: labelRows(doc.lines, await this.recordsForSet(setId)) };
     },
+    /** Editable print list for a SalesDrive order (no document needed). */
+    async rowsForOrder(orderId: number, lines: { sku: string; name: string; amount: number }[], setId: number) {
+      const set = await getSet(setId);
+      const rows = labelRows(lines.map(l => ({ sku: l.sku, name: l.name, qty: l.amount })), await this.recordsForSet(setId));
+      return { setName: set.name, title: `заявка ${orderId}`, rows };
+    },
+    /** Pages for an edited list; unknown and noPrint skus are dropped. */
+    async pagesFor(setId: number, items: { sku: string; qty: number }[]): Promise<{ setName: string; pages: LabelContent[] }> {
+      const set = await getSet(setId);
+      return { setName: set.name, pages: pagesForItems(items, await this.recordsForSet(setId)) };
+    },
+
   };
 }

@@ -1,8 +1,9 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { SdOrder, SdProduct } from '@/domain/types';
 import { downloadUrl, uah } from '@/ui/money';
 import { RecipientPicker, type RecipientOption } from '@/ui/RecipientPicker';
+import { LabelsDialog, loadLabelList, type LabelList } from '@/ui/LabelsDialog';
 
 type Preview = {
   order: SdOrder;
@@ -27,6 +28,15 @@ export function NewDocument() {
   const [date, setDate] = useState('');
   const [splits, setSplits] = useState<Splits>({});
   const [recipientId, setRecipientId] = useState<number | null>(null);
+  const [sets, setSets] = useState<{ id: number; name: string }[]>([]);
+  const [labels, setLabels] = useState<LabelList | null>(null);
+  useEffect(() => { void fetch('/api/label-sets').then(r => (r.ok ? r.json() : [])).then(setSets); }, []);
+
+  async function openLabels(set: { id: number; name: string }) {
+    setError('');
+    const { list, error } = await loadLabelList(`/api/orders/${p!.order.id}/labels?set=${set.id}`, set.id);
+    if (error) setError(error); else setLabels(list!);
+  }
 
   async function load(e?: React.FormEvent) {
     e?.preventDefault();
@@ -167,6 +177,15 @@ export function NewDocument() {
             <button className="primary" disabled={busy || blockers.length > 0} onClick={() => generate('NAKLADNA')}>Видаткова накладна (.xlsx)</button>
             {blockers.length > 0 && <span className="error">{blockers.join(' · ')}</span>}
           </div>
+
+          {sets.length > 0 && (
+            <div className="card row">
+              <b>Наклейки:</b>
+              {sets.map(set => <button key={set.id} onClick={() => openLabels(set)}>Друкувати: {set.name}</button>)}
+              <span className="muted">— за артикулами замовлення, перед друком можна змінити список</span>
+            </div>
+          )}
+          {labels && <LabelsDialog list={labels} onClose={() => setLabels(null)} />}
         </>
       )}
     </>
