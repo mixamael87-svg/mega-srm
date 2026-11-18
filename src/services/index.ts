@@ -2,4 +2,5 @@ import { prisma } from '../db/prisma';
 import { salesDrive } from '../salesdrive/fromEnv';
 import { createDocumentService } from './documents';
 
-export const documentService = () => createDocumentService({ prisma, sd: salesDrive() });
+/** SalesDrive client is created on first use (getter), so actions that don't need it never require its env. */
+export const documentService = () => createDocumentService({ prisma, get sd() { return salesDrive(); } });

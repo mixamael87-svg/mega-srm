@@ -2,7 +2,8 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { prisma, resetDb, makeFop } from '../setup/db';
 import { hashPassword } from '../../src/auth/password';
 import { POST as login } from '../../app/api/auth/login/route';
-import { GET as listFops, PATCH as patchFop } from '../../app/api/fops/route';
+import { GET as listFops, PATCH as patchFop, POST as createFop } from '../../app/api/fops/route';
+import { POST as importFops } from '../../app/api/fops/import/route';
 import { DELETE as deleteFop, GET as fopUsage } from '../../app/api/fops/[id]/route';
 import { GET as getOrder } from '../../app/api/orders/[id]/route';
 
@@ -45,5 +46,21 @@ describe('our FOPs API', () => {
     expect(j.fops).toEqual([{ id: b.id, name: 'ФОП Діючий' }]);
     expect(j.defaultFopId).toBe(b.id);
     void a;
+  });
+
+  it('manager: creates, edits and imports our FOPs, but cannot archive/restore them', async () => {
+    const created = await createFop(req('/api/fops', { method: 'POST', body: JSON.stringify({ name: 'ФОП Новий', requisites: 'ІПН 7', phone: '050' }) }, manager));
+    expect(created.status).toBe(201);
+    const f = await created.json();
+    const edited = await patchFop(req('/api/fops', { method: 'PATCH', body: JSON.stringify({ id: f.id, requisites: 'ІПН 8', isDefault: true }) }, manager));
+    expect(edited.status).toBe(200);
+    expect(await prisma.ourFop.findUniqueOrThrow({ where: { id: f.id } })).toMatchObject({ requisites: 'ІПН 8', isDefault: true, archived: false });
+    const archive = await patchFop(req('/api/fops', { method: 'PATCH', body: JSON.stringify({ id: f.id, archived: true }) }, manager));
+    expect(archive.status).toBe(403);
+    expect((await prisma.ourFop.findUniqueOrThrow({ where: { id: f.id } })).archived).toBe(false);
+    const imported = await importFops(req('/api/fops/import', { method: 'POST' }, manager));
+    expect(imported.status).toBe(200);
+    expect(await imported.json()).toEqual({ found: 1, created: 1 });
+    expect((await fopUsage(req(`/api/fops/${f.id}`, {}, manager), params(f.id))).status).toBe(403);
   });
 });

@@ -5,7 +5,7 @@ import { salesDrive } from '@/salesdrive/fromEnv';
 
 /** Import organizations found in SalesDrive documents as our FOPs (existing ones are left untouched). */
 export const POST = route(async (req: Request) => {
-  await requireUser(req, 'admin');
+  await requireUser(req);
   const orgs = await salesDrive().listOrganizations();
   let created = 0;
   for (const o of orgs) {

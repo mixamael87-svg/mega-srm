@@ -4,7 +4,7 @@ import { downloadUrl, kop } from '@/ui/money';
 
 type Row = { id: number; type: 'RAHUNOK' | 'NAKLADNA'; number: number; date: string; sdOrderId: number; status: 'ACTIVE' | 'ANNULLED'; clientName: string; fopName: string; createdBy: string; netKop: number };
 
-export function History({ isAdmin }: { isAdmin: boolean }) {
+export function History() {
   const [rows, setRows] = useState<Row[]>([]);
   const [q, setQ] = useState('');
   const [error, setError] = useState('');
@@ -46,7 +46,7 @@ export function History({ isAdmin }: { isAdmin: boolean }) {
                 <td>{r.status === 'ANNULLED' ? <span className="pill annulled">анульовано</span> : <span className="pill">активний</span>}</td>
                 <td className="num">
                   <button onClick={() => download(r.id)}>Завантажити</button>{' '}
-                  {isAdmin && r.status === 'ACTIVE' && <button onClick={() => annul(r)}>Анулювати</button>}
+                  {r.status === 'ACTIVE' && <button onClick={() => annul(r)}>Анулювати</button>}
                 </td>
               </tr>
             ))}

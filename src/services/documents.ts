@@ -43,16 +43,18 @@ const render = (type: DocType, h: DocHeader, lines: DocLine[], t: DocTotals) => 
 type HeaderSnapshot = { supplier: string; recipient: string; payer: string };
 
 export function createDocumentService(deps: { prisma: PrismaClient; sd: SalesDriveClient }) {
-  const { prisma, sd } = deps;
+  const { prisma } = deps;
+  // read deps.sd lazily: annul/download/history work even when SalesDrive isn't configured
+  const sdClient = () => deps.sd;
 
   async function variantsFor(skus: string[]): Promise<Record<string, SdProduct[]>> {
     const out: Record<string, SdProduct[]> = {};
-    for (const sku of new Set(skus)) out[sku] = await sd.listProductsBySku(sku);
+    for (const sku of new Set(skus)) out[sku] = await sdClient().listProductsBySku(sku);
     return out;
   }
 
   async function generateOnce(input: GenerateInput): Promise<GeneratedFile> {
-    const order = await sd.getOrder(input.sdOrderId);
+    const order = await sdClient().getOrder(input.sdOrderId);
     if (!order) throw new HttpError(404, `Замовлення № ${input.sdOrderId} не знайдено в SalesDrive`, 'ORDER_NOT_FOUND');
     if (!input.recipientFopId) throw new HttpError(400, 'Оберіть одержувача', 'RECIPIENT_REQUIRED');
     const client = await prisma.clientFop.findUnique({ where: { id: input.recipientFopId } });

@@ -6,7 +6,7 @@ type Pending = { id: number; name: string; text: string };
 const docsWord = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'документ' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'документи' : 'документів');
 const EXAMPLE = 'Юр. адреса: м. Київ, вул. …\nIBAN UA… в АТ КБ "ПРИВАТБАНК"\nІПН …';
 
-export function FopsClient() {
+export function FopsClient({ isAdmin }: { isAdmin: boolean }) {
   const [fops, setFops] = useState<Fop[]>([]);
   const [msg, setMsg] = useState('');
   const [pending, setPending] = useState<Pending | null>(null);
@@ -70,9 +70,9 @@ export function FopsClient() {
           <FopFields f={f} />
           <div className="row">
             <button className="primary">Зберегти</button>
-            {f.archived
+            {isAdmin && (f.archived
               ? <button type="button" onClick={() => send('PATCH', { id: f.id, archived: false })}>Повернути</button>
-              : <button type="button" onClick={() => askDelete(f)}>Видалити</button>}
+              : <button type="button" onClick={() => askDelete(f)}>Видалити</button>)}
           </div>
         </form>
       ))}

@@ -16,6 +16,8 @@ const env = {
 export default defineConfig({
   testDir: 'e2e',
   timeout: 60_000,
+  workers: 1, // specs share one test database
+  fullyParallel: false,
   use: { baseURL: `http://localhost:${PORT}`, acceptDownloads: true, locale: 'uk-UA' },
   globalSetup: './e2e/global-setup.ts',
   webServer: { command: 'npx next build && npx next start', port: PORT, timeout: 240_000, reuseExistingServer: false, env },

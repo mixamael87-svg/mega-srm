@@ -16,7 +16,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           <a href="/documents/new">Новий документ</a>
           <a href="/documents">Історія</a>
           <a href="/clients">Клієнти</a>
-          {user.role === 'admin' && <a href="/settings/fops">Наші ФОП</a>}
+          <a href="/settings/fops">Наші ФОП</a>
           {user.role === 'admin' && <a href="/settings/users">Користувачі</a>}
         </nav>
         <span className="muted">{user.login}</span>
