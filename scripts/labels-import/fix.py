@@ -83,6 +83,9 @@ SERIES_1200 = [
 # The mark sits mid-right on the old MegaZayka labels — the detector only looks at the top-right corner
 MARK_BY_EYE = {'0310', '0311', '0315', '0331', '0332', '0604', '1007', '1008'}
 
+# Barcodes kept as printed by BarTender although they differ from ean13(sku) (owner, 18.11.2026)
+BARCODE_AS_ORIGINAL = {'0810': '4826077008116'}
+
 # Per-label corrections found by eye against the previews (17.11.2026)
 BY_KEY = {
     '0539': [(r'\(0міс\+\)', '(0м+)')],
@@ -118,6 +121,8 @@ if __name__ == '__main__':
         if it['sku'] and 1205 <= int(it['sku']) <= 1221:
             for p, r in SERIES_1200:
                 it['text'] = re.sub(p, r, it['text'], flags=re.S)
+        if it['key'] in BARCODE_AS_ORIGINAL:
+            it['barcode'] = BARCODE_AS_ORIGINAL[it['key']]
         if it['key'] in MARK_BY_EYE:
             it['showMark'] = True
     json.dump(items, open(sys.argv[2], 'w'), ensure_ascii=False, indent=1)
