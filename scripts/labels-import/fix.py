@@ -72,6 +72,8 @@ PATTERNS = [
     (r'іграш ок', 'іграшок'),
     (r'\b(35|40|50|80)[27](40|50|70|80)\b', r'\1*\2'),
     (r'\(60520\) 5\.?', '(60±20)%.'),
+    # the article goes on its own line (printed big and bold)
+    (r'^(.+?),?\s+((?:[АA]рт|арт)\. ?\d{4})$', r'\1\n\2'),
 ]
 
 # 1200 series (left aligned): "Арт. NNNN" / title / composition, and the paragraphs of the original

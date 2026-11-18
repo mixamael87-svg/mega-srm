@@ -23,10 +23,17 @@ const SCALES = [100, 90, 80];
 const READABLE = 6;
 
 const ASSETS = path.join(process.cwd(), 'assets');
-let assets: Promise<{ font: Buffer; mark: Buffer }> | undefined;
+type Assets = { font: Buffer; bold: Buffer; mark: Buffer };
+let assets: Promise<Assets> | undefined;
+/** SemiBold body text: Regular strokes drop out and Bold fills in on the 203 dpi printer (owner's test prints, 18.11.2026). */
 const loadAssets = () =>
-  (assets ??= Promise.all([readFile(path.join(ASSETS, 'fonts/Arimo-Regular.ttf')), readFile(path.join(ASSETS, 'labels/conformity-mark.png'))])
-    .then(([font, mark]) => ({ font, mark })));
+  (assets ??= Promise.all(['fonts/Arimo-SemiBold.ttf', 'fonts/Arimo-Bold.ttf', 'labels/conformity-mark.png'].map(f => readFile(path.join(ASSETS, f))))
+    .then(([font, bold, mark]) => ({ font: font!, bold: bold!, mark: mark! })));
+
+/** The "арт. NNNN" line is printed big and bold so the article is always easy to read. */
+const ART_RE = /^\s*арт\.?\s*\d{4}\s*$/i;
+export const ART_SIZE = 8;
+const artSize = (size: number) => Math.max(size, ART_SIZE);
 
 // ---------- EAN-13 ----------
 const L = ['0001101', '0011001', '0010011', '0111101', '0100011', '0110001', '0101111', '0111011', '0110111', '0001011'];
@@ -61,21 +68,28 @@ export function fitFontSize(text: string, widthPt: number, heightPt: number, mea
 
 type Measure = ((text: string, size: number, width: number) => number) & { wordWidth?: (word: string, size: number) => number };
 
-function newDoc(font: Buffer) {
+function newDoc(a: Assets) {
   const doc = new PDFDocument({ size: [PAGE_W, PAGE_H], margin: 0, autoFirstPage: false, info: { Title: 'Наклейки' } });
-  doc.registerFont('label', font);
+  doc.registerFont('label', a.font);
+  doc.registerFont('label-bold', a.bold);
   doc.font('label');
   return doc;
 }
 /** Paragraphs are measured and drawn one by one: pdfkit counts a "\n" glyph into the line width,
  * which shifts centred lines left and can add an empty line. An empty paragraph = one blank line. */
-const paragraphHeight = (doc: PDFKit.PDFDocument, p: string, width: number) =>
-  p.trim() ? doc.heightOfString(p, { width, lineGap: 0 }) : doc.currentLineHeight(true);
+function paragraphHeight(doc: PDFKit.PDFDocument, p: string, width: number, size: number): number {
+  if (!p.trim()) return doc.font('label').fontSize(size).currentLineHeight(true);
+  if (ART_RE.test(p)) {
+    const h = doc.font('label-bold').fontSize(artSize(size)).heightOfString(p.trim(), { width, lineGap: 0 });
+    doc.font('label').fontSize(size);
+    return h;
+  }
+  return doc.font('label').fontSize(size).heightOfString(p, { width, lineGap: 0 });
+}
 const measurer = (doc: PDFKit.PDFDocument): Measure => {
   const m: Measure = (text, size, width) => {
     if (!text) return 0;
-    doc.fontSize(size);
-    return text.split('\n').reduce((h, p) => h + paragraphHeight(doc, p, width), 0);
+    return text.split('\n').reduce((h, p) => h + paragraphHeight(doc, p, width, size), 0);
   };
   m.wordWidth = (word, size) => doc.fontSize(size).widthOfString(word);
   return m;
@@ -84,7 +98,7 @@ const measurer = (doc: PDFKit.PDFDocument): Measure => {
 let sharedMeasure: Promise<Measure> | undefined;
 /** Height-measuring function for text set in the label font (no condensing); one parsed font for the process. */
 export async function textMeasure(): Promise<Measure> {
-  return (sharedMeasure ??= loadAssets().then(a => measurer(newDoc(a.font))));
+  return (sharedMeasure ??= loadAssets().then(a => measurer(newDoc(a))));
 }
 
 /** With the mark, the title lines (up to the "арт. NNNN" line) sit in a narrower band beside it. */
@@ -144,9 +158,10 @@ function computeLayout(c: LabelContent, m: Measure): Layout {
 }
 
 /** Chosen font size and condensing; `fits` = false when the text overflows even at 4 pt and 55 %. */
-export async function labelLayout(c: LabelContent): Promise<{ size: number; scale: number; fits: boolean; textHeight: number }> {
+export async function labelLayout(c: LabelContent): Promise<{ size: number; scale: number; fits: boolean; textHeight: number; artSize: number }> {
   const l = layout(c, await textMeasure());
-  return { size: l.size, scale: l.scale, fits: l.headH + l.bodyH <= l.area.h + 0.01, textHeight: l.headH + l.bodyH };
+  const hasArt = c.text.split('\n').some(p => ART_RE.test(p));
+  return { size: l.size, scale: l.scale, fits: l.headH + l.bodyH <= l.area.h + 0.01, textHeight: l.headH + l.bodyH, artSize: hasArt ? artSize(l.size) : l.size };
 }
 
 /** False when the text overflows its area even at the smallest size and the strongest condensing. */
@@ -158,8 +173,9 @@ export async function labelFits(c: LabelContent): Promise<boolean> {
 /** PDF with one 37.5 × 40 mm page per label. */
 export async function renderLabelsPdf(pages: LabelContent[]): Promise<Buffer> {
   if (pages.length === 0) throw new Error('NO_PAGES');
-  const { font, mark } = await loadAssets();
-  const doc = newDoc(font);
+  const a = await loadAssets();
+  const { mark } = a;
+  const doc = newDoc(a);
   const m = measurer(doc);
   const chunks: Buffer[] = [];
   doc.on('data', (c: Buffer) => chunks.push(c));
@@ -192,12 +208,15 @@ function drawText(doc: PDFKit.PDFDocument, text: string, x: number, y: number, w
   const k = scale / 100;
   doc.save();
   doc.transform(k, 0, 0, 1, x, 0); // squeeze horizontally around the box's left edge
-  doc.fillColor('black').fontSize(size);
+  doc.fillColor('black');
   let yy = y;
   for (const p of text.split('\n')) {
-    if (p.trim()) doc.text(p, 0, yy, { width: w / k, align, lineGap: 0 });
-    yy += paragraphHeight(doc, p, w / k);
+    const h = paragraphHeight(doc, p, w / k, size);
+    if (ART_RE.test(p)) doc.font('label-bold').fontSize(artSize(size)).text(p.trim(), 0, yy, { width: w / k, align, lineGap: 0 });
+    else if (p.trim()) doc.font('label').fontSize(size).text(p, 0, yy, { width: w / k, align, lineGap: 0 });
+    yy += h;
   }
+  doc.font('label').fontSize(size);
   doc.restore();
 }
 

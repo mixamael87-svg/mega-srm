@@ -57,10 +57,20 @@ describe('labelLayout', () => {
     for (const t of [full, short, full + ' ' + full.slice(0, 200)]) expect((await labelLayout(lbl(t))).scale).toBeGreaterThanOrEqual(80);
   });
 
+  it('the article line is printed big and bold even on a full label', async () => {
+    const l = await labelLayout(lbl(full));
+    expect(l.artSize).toBeGreaterThanOrEqual(8);
+    expect(l.artSize).toBeGreaterThan(l.size);
+    expect(l.fits).toBe(true);
+    const pdf = (await renderLabelsPdf([lbl(full)])).toString('latin1');
+    expect(pdf).toMatch(/\/BaseFont \/\w+\+Arimo-SemiBold/);
+    expect(pdf).toMatch(/\/BaseFont \/\w+\+Arimo-Bold/);
+  });
+
   it('a full label fits at a readable size', async () => {
     const l = await labelLayout(lbl(full));
     expect(l.fits).toBe(true);
-    expect(l.size).toBeGreaterThanOrEqual(4.5); // variant D chosen by the owner: ≥ 80 % width, ~4.5 pt for the longest texts
+    expect(l.size).toBeGreaterThanOrEqual(4.25); // SemiBold, ≥ 80 % width (owner, 18.11): ~4.25 pt for the longest texts
   });
 });
 
