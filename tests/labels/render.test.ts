@@ -46,17 +46,21 @@ describe('fitFontSize', () => {
 describe('labelLayout', () => {
   it('text that never fits gets the smallest size and the strongest condensing, and is clipped', async () => {
     const l = await labelLayout(lbl(full.repeat(6)));
-    expect(l).toMatchObject({ size: 4, scale: 55, fits: false });
+    expect(l).toMatchObject({ size: 4, scale: 80, fits: false });
   });
   it('a short label has no phantom empty line after a word that fills the width', async () => {
     const l = await labelLayout(lbl('Аквакилимок\n"Сафарі"\nарт. 0921'));
     expect(l.textHeight).toBeLessThan(3.5 * l.size * 1.2);
   });
 
+  it('text is never condensed below 80 % (narrower letters fill in on a 203 dpi thermal printer)', async () => {
+    for (const t of [full, short, full + ' ' + full.slice(0, 200)]) expect((await labelLayout(lbl(t))).scale).toBeGreaterThanOrEqual(80);
+  });
+
   it('a full label fits at a readable size', async () => {
     const l = await labelLayout(lbl(full));
     expect(l.fits).toBe(true);
-    expect(l.size).toBeGreaterThanOrEqual(5);
+    expect(l.size).toBeGreaterThanOrEqual(4.5); // variant D chosen by the owner: ≥ 80 % width, ~4.5 pt for the longest texts
   });
 });
 

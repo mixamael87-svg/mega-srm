@@ -67,7 +67,7 @@ PATTERNS = [
     (r'кімната 1071', 'кімната 101'),
     (r'\(100[079]5 ', '(100% '),
     (r'1\.5М AAA', '1.5V AAA'),
-    (r'Me1399', '№1399'),
+    (r'[MМ][eе]1399', '№1399'),
     (r'піщалка', 'пищалка'),
     (r'іграш ок', 'іграшок'),
     (r'\b(35|40|50|80)[27](40|50|70|80)\b', r'\1*\2'),
@@ -75,9 +75,10 @@ PATTERNS = [
 ]
 
 # 1200 series (left aligned): "Арт. NNNN" / title / composition, and the paragraphs of the original
+# (no blank line and no separate «Контакти»/«Претензії» paragraphs: with letters ≥ 80 % wide, 1217 would not fit otherwise)
 SERIES_1200 = [
-    (r'^(Арт\. \d{4})\n(.+?) (Склад матеріалу|Матеріал корпусу)', r'\1\n\2\n\n\3'),
-    (r' (Виготовлено компанією|Імпортер ТОВ|Контакти:|Претензії від|Адреса виробника)', r'\n\1'),
+    (r'^(Арт\. \d{4})\n(.+?) (Склад матеріалу|Матеріал корпусу)', r'\1\n\2\n\3'),
+    (r' (Виготовлено компанією|Імпортер ТОВ|Адреса виробника)', r'\n\1'),
 ]
 
 # The mark sits mid-right on the old MegaZayka labels — the detector only looks at the top-right corner

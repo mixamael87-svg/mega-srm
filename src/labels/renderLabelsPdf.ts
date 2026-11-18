@@ -17,14 +17,15 @@ const MARK = 16;
 export const TEXT_WIDTH_PT = PAGE_W - 2 * MARGIN;
 export const MIN_SIZE = 4;
 export const MAX_SIZE = 14;
-/** Horizontal condensing tried in order (BarTender labels are set condensed); the first one giving ≥ 6 pt wins. */
-const SCALES = [100, 90, 80, 70, 60, 55];
+/** Horizontal condensing tried in order; the first one giving ≥ 6 pt wins. Not below 80 %: narrower
+ * letters fill in on the 203 dpi thermal printer (owner's test print, 18.11.2026 — variant D). */
+const SCALES = [100, 90, 80];
 const READABLE = 6;
 
 const ASSETS = path.join(process.cwd(), 'assets');
 let assets: Promise<{ font: Buffer; mark: Buffer }> | undefined;
 const loadAssets = () =>
-  (assets ??= Promise.all([readFile(path.join(ASSETS, 'fonts/Arimo-Bold.ttf')), readFile(path.join(ASSETS, 'labels/conformity-mark.png'))])
+  (assets ??= Promise.all([readFile(path.join(ASSETS, 'fonts/Arimo-Regular.ttf')), readFile(path.join(ASSETS, 'labels/conformity-mark.png'))])
     .then(([font, mark]) => ({ font, mark })));
 
 // ---------- EAN-13 ----------
