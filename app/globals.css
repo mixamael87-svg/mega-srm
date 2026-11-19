@@ -35,3 +35,5 @@ tr.mix > td { background: var(--mix); }
 .pill.warn { background:#f6d9d1; color:var(--warn); }
 .dialog-footer { position:sticky; bottom:-18px; background:var(--card); border-top:1px solid var(--line); margin:14px -20px -18px; padding:12px 20px 18px; }
 details summary { cursor:pointer; color:var(--muted, #666); }
+.drop { display:block; border:2px dashed var(--line); border-radius:8px; padding:16px; text-align:center; cursor:pointer; background:#fff; }
+.drop:hover, .drop.drag { border-color: var(--accent); background:#eef5f2; }

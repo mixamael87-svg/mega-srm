@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 
 test('client report: turnover → stock → map unknown code → povernennya → new prices → revaluation nakladna → history', async ({ page }) => {
   await page.goto('/login');
@@ -16,7 +17,18 @@ test('client report: turnover → stock → map unknown code → povernennya →
   await expect(page.getByText('«Оборот по постачальникам» 01.10.2026 – 31.10.2026')).toBeVisible();
   await expect(page.getByText('⚠ Не розпізнано (1)')).toBeVisible();
 
-  await page.getByLabel('Файл звіту (.xls, .xlsx)').setInputFiles('tests/fixtures/reports/bagel-stock.xls');
+  // drag & drop the stock report onto the drop zone
+  const bytes = readFileSync('tests/fixtures/reports/bagel-stock.xls').toString('base64');
+  const dt = await page.evaluateHandle(b64 => {
+    const d = new DataTransfer();
+    const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    d.items.add(new File([bin], 'Залишок 02.11.2026.xls', { type: 'application/vnd.ms-excel' }));
+    return d;
+  }, bytes);
+  await page.getByTestId('report-drop').dispatchEvent('dragover', { dataTransfer: dt });
+  await expect(page.getByTestId('report-drop')).toHaveClass(/drag/);
+  await page.getByTestId('report-drop').dispatchEvent('drop', { dataTransfer: dt });
+  await expect(page.getByTestId('report-drop')).toContainText('Залишок 02.11.2026.xls');
   await page.getByRole('button', { name: 'Завантажити' }).click();
   await expect(page.getByText('«Залишок товару по постачальникам» 01.11.2026 – 02.11.2026')).toBeVisible();
   await page.getByLabel('Наш артикул для 90001').fill('0726');

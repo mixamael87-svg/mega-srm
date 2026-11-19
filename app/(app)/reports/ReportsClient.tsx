@@ -95,7 +95,7 @@ export function ReportsClient() {
             <option value={0}>— оберіть —</option>
             {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select></div>
-        <div><label htmlFor="rf">Файл звіту (.xls, .xlsx)</label><input id="rf" type="file" accept=".xls,.xlsx" onChange={e => setFile(e.target.files?.[0] ?? null)} /></div>
+        <div style={{ flex: 1, minWidth: 260 }}><label htmlFor="rf">Файл звіту (.xls, .xlsx)</label><FileDrop file={file} onFile={setFile} /></div>
         <button className="primary" disabled={busy}>Завантажити</button>
       </form>
       {error && <div className="card error" role="status">{error}</div>}
@@ -164,6 +164,25 @@ export function ReportsClient() {
         </>
       )}
     </>
+  );
+}
+
+/** Drop zone for the report file: drag a file onto it or click to choose. */
+function FileDrop({ file, onFile }: { file: File | null; onFile: (f: File | null) => void }) {
+  const [drag, setDrag] = useState(false);
+  const ok = (f: File | undefined) => (f && /\.(xls|xlsx)$/i.test(f.name) ? f : null);
+  return (
+    <label
+      htmlFor="rf"
+      data-testid="report-drop"
+      className={drag ? 'drop drag' : 'drop'}
+      onDragOver={e => { e.preventDefault(); setDrag(true); }}
+      onDragLeave={() => setDrag(false)}
+      onDrop={e => { e.preventDefault(); setDrag(false); const f = ok(e.dataTransfer.files?.[0]); if (f) onFile(f); }}
+    >
+      <input id="rf" type="file" accept=".xls,.xlsx" style={{ display: 'none' }} onChange={e => onFile(ok(e.target.files?.[0] ?? undefined))} />
+      {file ? <><b>{file.name}</b> <span className="muted">· натисніть або перетягніть інший файл</span></> : <span className="muted">Перетягніть файл сюди або натисніть, щоб вибрати</span>}
+    </label>
   );
 }
 
