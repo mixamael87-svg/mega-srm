@@ -3,14 +3,21 @@ import { requireUser } from '@/auth/session';
 import { HttpError, jsonResponse, route } from '@/http/errors';
 import { readSheetRows } from '@/reports/xls';
 import { parseBagel } from '@/reports/bagel';
-import { matchLines } from '@/reports/match';
+import { skuFromBarcode } from '@/reports/match';
 import { ourName } from '@/reports/names';
+import { createNameIndex } from '@/reports/suggest';
 import { createClientCodeService } from '@/services/clientCodes';
 import { salesDrive } from '@/salesdrive/fromEnv';
+import type { RawLine } from '@/reports/types';
 
 const MAX = 5 * 1024 * 1024;
+type Source = 'barcode' | 'saved' | 'name' | null;
 
-/** Upload a client report (multipart: clientId, file) → parsed, matched to our SKUs; learned codes are remembered. */
+/**
+ * Upload a client report (multipart: clientId, file). Every line gets our SKU and where it came from:
+ * our barcode (exact) → a code saved for this client (exact) → a suggestion by name (to confirm) → none.
+ * Codes seen with one consistent barcode are remembered. `catalog` maps SKU → our name for the UI.
+ */
 export const POST = route(async (req: Request) => {
   await requireUser(req);
   if (Number(req.headers.get('content-length') ?? 0) > MAX + 64 * 1024) throw new HttpError(413, 'Файл більший за 5 МБ');
@@ -23,11 +30,35 @@ export const POST = route(async (req: Request) => {
 
   const report = parseBagel(readSheetRows(new Uint8Array(await file.arrayBuffer())));
   const codes = createClientCodeService(prisma);
-  const { matched, unmatched, learned, conflicts } = matchLines(report.lines, await codes.load(clientId));
-  await codes.learn(clientId, learned);
+  const saved = await codes.load(clientId);
 
-  const names = new Map<string, string | null>();
-  for (const sku of new Set(matched.map(m => m.sku))) names.set(sku, ourName(await salesDrive().listProductsBySku(sku).catch(() => [])));
-  const { lines: _lines, ...meta } = report;
-  return jsonResponse({ report: meta, matched: matched.map(m => ({ ...m, ourName: names.get(m.sku) ?? null })), unmatched, conflicts });
+  // learn codes whose rows all carry the same one of our barcodes
+  const byBarcode = new Map<string, Set<string>>();
+  for (const l of report.lines) { const s = skuFromBarcode(l.barcode); if (s) byBarcode.set(l.code, (byBarcode.get(l.code) ?? new Set()).add(s)); }
+  const conflicts = [...byBarcode].filter(([, s]) => s.size > 1).map(([c]) => c);
+  const learned = new Map([...byBarcode].filter(([c, s]) => s.size === 1 && saved.get(c) !== [...s][0]).map(([c, s]) => [c, [...s][0]!]));
+  await codes.learn(clientId, learned);
+  for (const [c, s] of learned) if (!saved.has(c)) saved.set(c, s);
+
+  const products = await salesDrive().listProducts().catch(() => []);
+  const index = createNameIndex(products);
+  const suggestions = new Map<string, string | null>();
+  const resolve = (l: RawLine): { sku: string | null; source: Source } => {
+    const b = skuFromBarcode(l.barcode);
+    if (b) return { sku: b, source: 'barcode' };
+    const s = saved.get(l.code);
+    if (s) return { sku: s, source: 'saved' };
+    if (!suggestions.has(l.code)) suggestions.set(l.code, index.suggest(l.name)?.sku ?? null);
+    const n = suggestions.get(l.code)!;
+    return n ? { sku: n, source: 'name' } : { sku: null, source: null };
+  };
+  const lines = report.lines.map(l => ({ ...l, ...resolve(l) }));
+
+  const bySku = new Map<string, typeof products>();
+  for (const p of products) bySku.set(p.sku, [...(bySku.get(p.sku) ?? []), p]);
+  const catalog: Record<string, string> = {};
+  for (const [sku, ps] of bySku) { const n = ourName(ps); if (n) catalog[sku] = n; }
+
+  const { lines: _raw, ...meta } = report;
+  return jsonResponse({ report: meta, lines, conflicts, catalog });
 });

@@ -85,6 +85,15 @@ describe('listProductsBySku (YML catalog)', () => {
     expect(await c.listProductsBySku('9999')).toEqual([]);
     expect(await c.listProductsBySku('')).toEqual([]);
   });
+  it('listProducts returns the whole catalog (cached with the same TTL)', async () => {
+    const { f, calls } = mockFetch(() => ({ body: yml }));
+    const c = createSalesDriveClient(cfg(f, { catalogYmlUrl: 'https://x/y.yml' }));
+    const all = await c.listProducts();
+    expect(all.length).toBeGreaterThan(5);
+    expect(all.some(p => p.sku === 'PL20')).toBe(true);
+    await c.listProductsBySku('0907');
+    expect(calls).toHaveLength(1);
+  });
   it('decodes entities and CDATA', async () => {
     const { f } = mockFetch(() => ({ body: yml }));
     const c = createSalesDriveClient(cfg(f, { catalogYmlUrl: 'https://x/y.yml' }));

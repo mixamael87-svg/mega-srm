@@ -81,6 +81,11 @@ export function createSalesDriveClient(cfg: SalesDriveConfig) {
       return found ? mapOrder(found) : null;
     },
 
+    /** The whole YML catalog (cached 10 min); [] without a catalog link. */
+    async listProducts(): Promise<SdProduct[]> {
+      return loadCatalog();
+    },
+
     async listProductsBySku(sku: string): Promise<SdProduct[]> {
       const s = sku.trim();
       if (!s) return [];

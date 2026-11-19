@@ -24,6 +24,7 @@ function fakeSd(orders: Record<number, SdOrder>): SalesDriveClient {
   return {
     getOrder: async (id: number) => orders[id] ?? null,
     listProductsBySku: async (sku: string) => catalog.filter(p => p.sku === sku),
+    listProducts: async () => catalog,
     listOrganizations: async () => [{ id: 7, title: 'ФОП Ольховский', egrpou: '1', iban: 'UA1' }],
   };
 }

@@ -23,10 +23,15 @@ export function createMockSalesDrive(): SalesDriveClient {
     { id: 'c2', sku: '0001', name: 'Ніблер (блакитний)', inStock: 35 },
     { id: 'c3', sku: '0001', name: 'Ніблер (зелений)', inStock: 12 },
     { id: 'c4', sku: '0001', name: 'Ніблер (бузковий)', inStock: 8 },
+    // products of the synthetic client-report fixtures (name suggestions)
+    { id: 'r1', sku: '0909', name: 'Набір іграшок для купання "Уточки" (5 шт)', inStock: 20 },
+    { id: 'r2', sku: '0904', name: 'Аквакилимок "Кит"', inStock: 15 },
+    { id: 'r3', sku: '0926', name: 'Набір тактильних м`ячиків (6 шт)', inStock: 9 },
   ];
   return {
     getOrder: async id => orders[id] ?? null,
     listProductsBySku: async sku => catalog.filter(p => p.sku === sku),
+    listProducts: async () => catalog,
     listOrganizations: async () => [{ id: 1, title: 'ФОП Демо Постачальник', egrpou: '1234567890', iban: 'UA000000000000000000000000000' }],
   };
 }

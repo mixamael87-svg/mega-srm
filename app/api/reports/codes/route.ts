@@ -1,20 +1,22 @@
 import { z } from 'zod';
 import { prisma } from '@/db/prisma';
 import { requireUser } from '@/auth/session';
-import { jsonResponse, route } from '@/http/errors';
+import { HttpError, jsonResponse, route } from '@/http/errors';
 import { ourName } from '@/reports/names';
 import { createClientCodeService } from '@/services/clientCodes';
 import { salesDrive } from '@/salesdrive/fromEnv';
 
-const Body = z.object({ clientId: z.number().int().positive(), code: z.string(), sku: z.string() });
+const Body = z.object({ clientId: z.number().int().positive(), items: z.array(z.object({ code: z.string(), sku: z.string() })).min(1).max(5000) });
 
-/** Map a client's code to our SKU by hand (remembered for this client). */
+/** Save client code → our SKU by hand (one or many at once); remembered for this client. */
 export const POST = route(async (req: Request) => {
   await requireUser(req);
   const b = Body.parse(await req.json());
-  await createClientCodeService(prisma).setManual(b.clientId, b.code, b.sku);
-  const sku = b.sku.trim();
-  return jsonResponse({ sku, ourName: ourName(await salesDrive().listProductsBySku(sku).catch(() => [])) });
+  if (b.items.some(it => !/^\d{4}$/.test(it.sku.trim()) || !it.code.trim())) throw new HttpError(400, 'Артикул — 4 цифри'); // all-or-nothing
+  const svc = createClientCodeService(prisma);
+  for (const it of b.items) await svc.setManual(b.clientId, it.code, it.sku);
+  const products = await salesDrive().listProducts().catch(() => []);
+  return jsonResponse({ items: b.items.map(it => { const sku = it.sku.trim(); return { code: it.code.trim(), sku, ourName: ourName(products.filter(p => p.sku === sku)) }; }) });
 });
 
 /** Forget a mapping — admin only. */

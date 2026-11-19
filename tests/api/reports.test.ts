@@ -28,18 +28,28 @@ describe('client reports API', () => {
   });
   afterAll(() => prisma.$disconnect());
 
-  it('turnover teaches codes; stock without barcodes is then matched; foreign item unmatched', async () => {
+  it('every line gets a SKU source: barcode / saved / name / none; saved codes win next time', async () => {
+    const src = (j: any) => Object.fromEntries(j.lines.map((l: any) => [l.code, [l.sku, l.source]]));
+    // stock first, nothing known yet: names are matched against the catalog
+    const s0 = await (await parse(upload(clientId, fixture('bagel-stock.xls'), 's.xls', cookie))).json();
+    expect(s0.lines).toHaveLength(7);
+    expect(src(s0)).toMatchObject({ '88514': ['0909', 'name'], '89625': ['0904', 'name'], '90001': [null, null] });
+    expect(s0.catalog['0909']).toBe('Набір іграшок для купання "Уточки" (5 шт)');
+    // turnover: our barcodes → exact, and remembered
     const t = await (await parse(upload(clientId, fixture('bagel-turnover.xls'), 't.xls', cookie))).json();
-    expect(t.report).toMatchObject({ kind: 'turnover', stores: ['Магазин DEMO KIDS ТЦ "Центр"', 'Магазин DEMO KIDS ТЦ "Парк"'] });
-    expect([t.matched.length, t.unmatched.length]).toEqual([6, 1]);
-    expect(t.matched[0]).toMatchObject({ code: '88514', sku: '0909', ourName: null });
-    const s = await (await parse(upload(clientId, fixture('bagel-stock.xls'), 's.xls', cookie))).json();
-    expect([s.matched.length, s.unmatched.length]).toEqual([6, 1]);
-    expect(s.unmatched[0]).toMatchObject({ code: '90001', name: 'Чужий товар' });
-    // manual mapping is remembered for the next upload
-    expect((await setCode(jreq('/api/reports/codes', { clientId, code: '90001', sku: '0726' }, cookie))).status).toBe(200);
+    expect(src(t)).toMatchObject({ '88514': ['0909', 'barcode'], '89631': ['0926', 'barcode'], '90001': [null, null] });
+    // stock again: remembered codes; the foreign item is mapped by hand in a batch
+    const s1 = await (await parse(upload(clientId, fixture('bagel-stock.xls'), 's.xls', cookie))).json();
+    expect(src(s1)).toMatchObject({ '88514': ['0909', 'saved'], '89625': ['0904', 'saved'] });
+    const r = await setCode(jreq('/api/reports/codes', { clientId, items: [{ code: '90001', sku: '0726' }, { code: '89625', sku: '0905' }] }, cookie));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ items: [{ code: '90001', sku: '0726', ourName: null }, { code: '89625', sku: '0905', ourName: null }] });
     const s2 = await (await parse(upload(clientId, fixture('bagel-stock.xls'), 's.xls', cookie))).json();
-    expect([s2.matched.length, s2.unmatched.length]).toEqual([7, 0]);
+    expect(src(s2)).toMatchObject({ '90001': ['0726', 'saved'], '89625': ['0905', 'saved'] });
+    expect((await setCode(jreq('/api/reports/codes', { clientId, items: [{ code: '77', sku: '0101' }, { code: '1', sku: '12' }] }, cookie))).status).toBe(400);
+    const s3 = await (await parse(upload(clientId, fixture('bagel-stock.xls'), 's.xls', cookie))).json();
+    expect(s3.lines.some((l: any) => l.code === '77')).toBe(false); // nothing saved from a rejected batch
+    expect((await prisma.clientCode.findUnique({ where: { clientId_code: { clientId, code: '77' } } }))).toBeNull();
   });
 
   it('errors: no session 401, unknown format 422, too big 413, unknown client 404', async () => {

@@ -1,20 +1,25 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { aggregate, type AggRow } from '@/reports/aggregate';
-import type { MatchedLine } from '@/reports/match';
+import { aggregateByCode, type CodeRow } from '@/reports/aggregate';
 import type { ParsedReport, RawLine } from '@/reports/types';
 import { downloadUrl, kop } from '@/ui/money';
 
 type Client = { id: number; name: string; fops: { id: number; name: string }[] };
 type OurFop = { id: number; name: string; archived: boolean };
-type Parsed = { report: Omit<ParsedReport, 'lines'>; matched: (MatchedLine & { ourName: string | null })[]; unmatched: RawLine[]; conflicts: string[] };
+type Source = 'barcode' | 'saved' | 'name' | null;
+type Line = RawLine & { sku: string | null; source: Source };
+type Parsed = { report: Omit<ParsedReport, 'lines'>; lines: Line[]; conflicts: string[]; catalog: Record<string, string> };
 type Kind = 'POVERNENNYA' | 'PEREOTSINKA';
 type PartyKey = string; // 'our:ID' | 'client:ID'
+type SkuState = { sku: string; source: Source };
 
-const keyOf = (r: AggRow) => `${r.sku}|${r.priceKop}`;
+const keyOf = (r: CodeRow) => `${r.code}|${r.priceKop}`;
 const toKop = (s: string) => { const n = Number(s.replace(',', '.').trim()); return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : null; };
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const party = (k: PartyKey) => { const [type, id] = k.split(':'); return { type: type as 'our' | 'client', id: Number(id) }; };
+const exact = (s: Source) => s === 'barcode' || s === 'saved';
+const DOT: Record<string, string> = { exact: '🟢', name: '🟡', none: '⚪' };
+const dot = (st: SkuState | undefined) => (st && exact(st.source) ? DOT.exact : st?.sku && st.source === 'name' ? DOT.name : DOT.none);
 
 export function ReportsClient() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -23,8 +28,8 @@ export function ReportsClient() {
   const [file, setFile] = useState<File | null>(null);
   const [data, setData] = useState<Parsed | null>(null);
   const [store, setStore] = useState('ALL');
-  const [newPrice, setNewPrice] = useState<Record<string, string>>({});
-  const [manual, setManual] = useState<Record<string, string>>({});
+  const [skus, setSkus] = useState<Record<string, SkuState>>({}); // by client code
+  const [newPrice, setNewPrice] = useState<Record<string, string>>({}); // by code|price
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [busy, setBusy] = useState(false);
@@ -44,35 +49,54 @@ export function ReportsClient() {
     const j = await res.json().catch(() => ({ error: 'Помилка' }));
     setBusy(false);
     if (!res.ok) { setData(null); setError(j.error ?? 'Помилка'); return; }
-    setData(j); setStore('ALL'); setNewPrice({}); setManual({});
+    const p = j as Parsed;
+    const st: Record<string, SkuState> = {};
+    for (const l of p.lines) if (!st[l.code] || (exact(l.source) && !exact(st[l.code]!.source))) st[l.code] = { sku: l.sku ?? '', source: l.source };
+    const prices: Record<string, string> = {};
+    for (const r of aggregateByCode(p.lines, 'ALL')) prices[keyOf(r)] = (r.priceKop / 100).toFixed(2); // new price starts as the purchase price
+    setData(p); setSkus(st); setNewPrice(prices); setStore('ALL');
   }
 
-  const names = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const l of data?.matched ?? []) if (!m.has(l.sku)) m.set(l.sku, l.ourName ?? `${l.name} (з звіту)`);
-    return m;
-  }, [data]);
-  const rows = useMemo(() => (data ? aggregate(data.matched, store) : []), [data, store]);
-  const missingPrice = rows.filter(r => r.qty > 0 && !toKop(newPrice[keyOf(r)] ?? ''));
+  const rows = useMemo(() => (data ? aggregateByCode(data.lines, store) : []), [data, store]);
+  const nameFor = (r: CodeRow) => { const sku = skus[r.code]?.sku; return (sku && data?.catalog[sku]) || `${r.name} (з звіту)`; };
+  const pending = rows.filter(r => !exact(skus[r.code]?.source ?? null) || !/^\d{4}$/.test(skus[r.code]?.sku ?? ''));
+  const yellow = pending.filter(r => skus[r.code]?.source === 'name' && /^\d{4}$/.test(skus[r.code]!.sku));
   const storeLabel = store === 'ALL' ? 'Усі магазини' : store;
 
-  async function mapCode(l: RawLine) {
-    const sku = (manual[l.code] ?? '').trim();
-    const res = await fetch('/api/reports/codes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ clientId, code: l.code, sku }) });
+  async function saveCodes(items: { code: string; sku: string }[]) {
+    if (items.length === 0) return;
+    setError('');
+    const res = await fetch('/api/reports/codes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ clientId, items }) });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) { setError(j.error ?? 'Помилка'); return; }
-    setData(d => d && {
-      ...d,
-      matched: [...d.matched, ...d.unmatched.filter(u => u.code === l.code).map(u => ({ ...u, sku: j.sku, ourName: j.ourName }))],
-      unmatched: d.unmatched.filter(u => u.code !== l.code),
-    });
+    setSkus(s => { const n = { ...s }; for (const it of j.items as { code: string; sku: string; ourName: string | null }[]) n[it.code] = { sku: it.sku, source: 'saved' }; return n; });
+    setData(d => d && { ...d, catalog: { ...d.catalog, ...Object.fromEntries((j.items as { sku: string; ourName: string | null }[]).filter(i => i.ourName).map(i => [i.sku, i.ourName!])) } });
+  }
+
+  /** Document/Excel lines grouped by our SKU and price. */
+  function docLines(price: (r: CodeRow) => number) {
+    const m = new Map<string, { sku: string; name: string; qty: number; priceKop: number }>();
+    for (const r of rows) {
+      if (r.qty <= 0) continue;
+      const sku = skus[r.code]!.sku, p = price(r), k = `${sku}|${p}`;
+      const x = m.get(k) ?? { sku, name: nameFor(r), qty: 0, priceKop: p };
+      x.qty += r.qty; m.set(k, x);
+    }
+    return [...m.values()];
   }
 
   async function exportXlsx() {
     if (!data) return;
+    const bySku = new Map<string, { sku: string; name: string; priceKop: number; newPriceKop: number | null; qty: number; opening: number; incoming: number; soldRetail: number; soldOther: number }>();
+    for (const r of rows) {
+      const sku = skus[r.code]!.sku, np = toKop(newPrice[keyOf(r)] ?? ''), k = `${sku}|${r.priceKop}|${np}`;
+      const x = bySku.get(k) ?? { sku, name: nameFor(r), priceKop: r.priceKop, newPriceKop: np, qty: 0, opening: 0, incoming: 0, soldRetail: 0, soldOther: 0 };
+      x.qty += r.qty; x.opening += r.opening; x.incoming += r.incoming; x.soldRetail += r.soldRetail; x.soldOther += r.soldOther;
+      bySku.set(k, x);
+    }
     const res = await fetch('/api/reports/export', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ meta: { client: client?.name ?? data.report.client, title: data.report.title, kind: data.report.kind, dateFrom: data.report.dateFrom, dateTo: data.report.dateTo, store: storeLabel }, rows: rows.map(r => ({ ...r, name: names.get(r.sku) ?? '', newPriceKop: toKop(newPrice[keyOf(r)] ?? '') })) }),
+      body: JSON.stringify({ meta: { client: client?.name ?? data.report.client, title: data.report.title, kind: data.report.kind, dateFrom: data.report.dateFrom, dateTo: data.report.dateTo, store: storeLabel }, rows: [...bySku.values()] }),
     });
     if (!res.ok) { setError((await res.json().catch(() => ({}))).error ?? 'Помилка'); return; }
     const url = URL.createObjectURL(await res.blob());
@@ -85,6 +109,8 @@ export function ReportsClient() {
     ...ourFops.map(f => ({ key: `our:${f.id}`, label: `Наш: ${f.name}` })),
     ...(client?.fops ?? []).map(f => ({ key: `client:${f.id}`, label: `Клієнт: ${f.name}` })),
   ];
+  const skuBlocker = pending.length ? `Підтвердіть або виправте артикули: ${pending.length}` : null;
+  const missingPrice = rows.filter(r => r.qty > 0 && !toKop(newPrice[keyOf(r)] ?? ''));
 
   return (
     <>
@@ -112,37 +138,37 @@ export function ReportsClient() {
               </select></div>
           </div>
 
-          {data.unmatched.length > 0 && (
-            <div className="card">
-              <h2 className="error" style={{ marginTop: 0 }}>⚠ Не розпізнано ({data.unmatched.length})</h2>
-              {[...new Map(data.unmatched.map(u => [u.code, u])).values()].map(u => (
-                <div key={u.code} className="row" style={{ alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ flex: 1 }}>{u.code} «{u.name}» {u.barcode && <span className="muted">штрихкод {u.barcode}</span>}</span>
-                  <input aria-label={`Наш артикул для ${u.code}`} placeholder="наш артикул" style={{ width: 110 }} value={manual[u.code] ?? ''} onChange={e => setManual(m => ({ ...m, [u.code]: e.target.value }))} />
-                  <button onClick={() => mapCode(u)}>Зберегти</button>
-                </div>
-              ))}
-            </div>
-          )}
-
           <div className="card">
-            <div className="row" style={{ marginBottom: 8 }}>
-              <button onClick={() => setNewPrice(Object.fromEntries(rows.map(r => [keyOf(r), (r.priceKop / 100).toFixed(2)])))}>Заповнити старою ціною</button>
-              <button onClick={exportXlsx}>Excel (наш формат)</button>
+            <div className="row" style={{ marginBottom: 8, alignItems: 'center' }}>
+              <span className="muted" style={{ flex: 1 }}>🟢 точно (штрихкод або збережено) · 🟡 підібрано за назвою — перевірте · ⚪ не знайдено — впишіть артикул</span>
+              {yellow.length > 0 && <button onClick={() => saveCodes(yellow.map(r => ({ code: r.code, sku: skus[r.code]!.sku })))}>Підтвердити всі 🟡 ({yellow.length})</button>}
+              <button onClick={exportXlsx} disabled={!!skuBlocker}>Excel (наш формат)</button>
             </div>
+            {skuBlocker && <div className="error" style={{ marginBottom: 8 }}>{skuBlocker}</div>}
             <table>
-              <thead><tr><th>№</th><th>Артикул</th><th>Назва</th>
+              <thead><tr><th>№</th><th>Товар у звіті клієнта</th><th>Артикул</th><th>Наша назва</th>
                 {data.report.kind === 'turnover' && <><th className="num">На початок</th><th className="num">Прихід</th><th className="num">Продано</th></>}
                 <th className="num">{data.report.kind === 'turnover' ? 'На кінець' : 'К-сть'}</th><th className="num">Стара ціна</th><th className="num">Нова ціна</th><th className="num">Сума стара</th><th className="num">Сума нова</th></tr></thead>
               <tbody>
                 {rows.map((r, i) => {
+                  const st = skus[r.code];
                   const np = toKop(newPrice[keyOf(r)] ?? '');
                   return (
                     <tr key={keyOf(r)}>
-                      <td>{i + 1}</td><td>{r.sku}</td><td>{names.get(r.sku)}</td>
+                      <td>{i + 1}</td>
+                      <td>{r.name} <span className="muted">· {r.code}</span></td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <span title={st?.source ?? ''}>{dot(st)}</span>{' '}
+                        <input aria-label={`Артикул ${r.code}`} style={{ width: 64 }} inputMode="numeric" value={st?.sku ?? ''}
+                          onChange={e => setSkus(s => ({ ...s, [r.code]: { sku: e.target.value.trim(), source: null } }))}
+                          onBlur={e => { const v = e.target.value.trim(); if (/^\d{4}$/.test(v) && !exact(skus[r.code]?.source ?? null) && skus[r.code]?.source !== 'name') void saveCodes([{ code: r.code, sku: v }]); }}
+                          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
+                        {st?.source === 'name' && /^\d{4}$/.test(st.sku) && <button aria-label={`Підтвердити ${r.code}`} style={{ marginLeft: 4, padding: '2px 8px' }} onClick={() => saveCodes([{ code: r.code, sku: st.sku }])}>✓</button>}
+                      </td>
+                      <td>{st?.sku && data.catalog[st.sku] ? data.catalog[st.sku] : <span className="muted">—</span>}</td>
                       {data.report.kind === 'turnover' && <><td className="num">{r.opening}</td><td className="num">{r.incoming}</td><td className="num">{r.soldRetail + r.soldOther}</td></>}
                       <td className="num">{r.qty}</td><td className="num">{kop(r.priceKop)}</td>
-                      <td className="num"><input aria-label={`Нова ціна ${r.sku}`} style={{ width: 90, textAlign: 'right' }} inputMode="decimal" value={newPrice[keyOf(r)] ?? ''} onChange={e => setNewPrice(p => ({ ...p, [keyOf(r)]: e.target.value }))} /></td>
+                      <td className="num"><input aria-label={`Нова ціна ${r.code}`} style={{ width: 90, textAlign: 'right' }} inputMode="decimal" value={newPrice[keyOf(r)] ?? ''} onChange={e => setNewPrice(p => ({ ...p, [keyOf(r)]: e.target.value }))} /></td>
                       <td className="num">{kop(Math.round(r.qty * r.priceKop))}</td><td className="num">{np ? kop(Math.round(r.qty * np)) : ''}</td>
                     </tr>
                   );
@@ -154,12 +180,12 @@ export function ReportsClient() {
           <div className="row" style={{ alignItems: 'stretch' }}>
             <DocForm kind="POVERNENNYA" title="Накладна на повернення" hint="За старими цінами зі звіту"
               clientId={clientId} options={partyOptions} defaults={{ supplier: client?.fops[0] ? `client:${client.fops[0].id}` : '', recipient: ourFops[0] ? `our:${ourFops[0].id}` : '' }}
-              lines={rows.filter(r => r.qty > 0).map(r => ({ sku: r.sku, name: names.get(r.sku) ?? '', qty: r.qty, priceKop: r.priceKop }))}
-              blocker={null} onError={setError} onDone={setInfo} />
+              lines={skuBlocker ? [] : docLines(r => r.priceKop)}
+              blocker={skuBlocker} onError={setError} onDone={setInfo} />
             <DocForm kind="PEREOTSINKA" title="Видаткова накладна (переоцінка)" hint="За новими цінами"
               clientId={clientId} options={partyOptions} defaults={{ supplier: ourFops[0] ? `our:${ourFops[0].id}` : '', recipient: client?.fops[0] ? `client:${client.fops[0].id}` : '' }}
-              lines={rows.filter(r => r.qty > 0).map(r => ({ sku: r.sku, name: names.get(r.sku) ?? '', qty: r.qty, priceKop: toKop(newPrice[keyOf(r)] ?? '') ?? 0 }))}
-              blocker={missingPrice.length ? `Вкажіть нову ціну для всіх рядків (бракує ${missingPrice.length})` : null} onError={setError} onDone={setInfo} />
+              lines={skuBlocker ? [] : docLines(r => toKop(newPrice[keyOf(r)] ?? '') ?? 0)}
+              blocker={skuBlocker ?? (missingPrice.length ? `Вкажіть нову ціну для всіх рядків (бракує ${missingPrice.length})` : null)} onError={setError} onDone={setInfo} />
           </div>
         </>
       )}
