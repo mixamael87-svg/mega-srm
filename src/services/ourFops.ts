@@ -7,9 +7,9 @@ import { HttpError } from '../http/errors';
  */
 export function createOurFopService(prisma: PrismaClient) {
   async function documents(id: number): Promise<number> {
-    const f = await prisma.ourFop.findUnique({ where: { id }, select: { _count: { select: { documents: true } } } });
+    const f = await prisma.ourFop.findUnique({ where: { id }, select: { _count: { select: { documents: true, reportDocuments: true } } } });
     if (!f) throw new HttpError(404, 'ФОП не знайдено');
-    return f._count.documents;
+    return f._count.documents + f._count.reportDocuments;
   }
 
   return {

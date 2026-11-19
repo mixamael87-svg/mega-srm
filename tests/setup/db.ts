@@ -3,7 +3,7 @@ import { prisma } from '../../src/db/prisma';
 export async function resetDb() {
   if (!/test/.test(process.env.DATABASE_URL ?? '')) throw new Error('resetDb: not a test database');
   await prisma.$executeRawUnsafe(
-    'TRUNCATE "DocumentVersion", "Document", "InvoiceCounter", "ContactDefault", "ClientFop", "Client", "OurFop", "User", "Label" RESTART IDENTITY CASCADE',
+    'TRUNCATE "ReportDocument", "ReportCounter", "ClientCode", "DocumentVersion", "Document", "InvoiceCounter", "ContactDefault", "ClientFop", "Client", "OurFop", "User", "Label" RESTART IDENTITY CASCADE',
   );
   // label sets are seeded by the migration: keep those three, drop the ones tests created
   await prisma.$executeRawUnsafe(`DELETE FROM "LabelSet" WHERE "name" NOT IN ('Загальна', 'ФОП Кузнецов', 'ТОВ Кузкас')`);

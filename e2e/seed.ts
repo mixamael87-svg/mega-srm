@@ -3,7 +3,7 @@ import { prisma } from '../src/db/prisma';
 import { hashPassword } from '../src/auth/password';
 
 if (!/test/.test(process.env.DATABASE_URL ?? '')) throw new Error('refusing non-test DB');
-await prisma.$executeRawUnsafe('TRUNCATE "DocumentVersion", "Document", "InvoiceCounter", "ContactDefault", "ClientFop", "Client", "OurFop", "User", "Label" RESTART IDENTITY CASCADE');
+await prisma.$executeRawUnsafe('TRUNCATE "ReportDocument", "ReportCounter", "ClientCode", "DocumentVersion", "Document", "InvoiceCounter", "ContactDefault", "ClientFop", "Client", "OurFop", "User", "Label" RESTART IDENTITY CASCADE');
 await prisma.$executeRawUnsafe(`DELETE FROM "LabelSet" WHERE "name" NOT IN ('Загальна', 'ФОП Кузнецов', 'ТОВ Кузкас')`);
 await prisma.user.create({ data: { login: 'admin', passwordHash: await hashPassword('adminpass1'), role: 'admin' } });
 await prisma.user.create({ data: { login: 'manager', passwordHash: await hashPassword('managerpass1'), role: 'manager' } });

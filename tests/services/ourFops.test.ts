@@ -36,6 +36,14 @@ describe('our FOPs: delete or archive', () => {
     expect(await next(f.id)).toBe(3);
   });
 
+  it('revaluation documents count too: such a FOP is archived, not deleted', async () => {
+    const f = await makeFop('ФОП З переоцінкою');
+    const u = await prisma.user.create({ data: { login: 'r', passwordHash: 'x' } });
+    await prisma.reportDocument.create({ data: { kind: 'PEREOTSINKA', number: 1, date: nov, counterFopId: f.id, createdById: u.id, headerJson: {}, linesJson: [], totalsJson: {} } });
+    expect(await svc.usage(f.id)).toEqual({ documents: 1 });
+    expect(await svc.remove(f.id)).toEqual({ deleted: false, archived: true });
+  });
+
   it('unknown id → 404', async () => {
     await expect(svc.usage(99999)).rejects.toMatchObject({ status: 404 });
     await expect(svc.remove(99999)).rejects.toMatchObject({ status: 404 });

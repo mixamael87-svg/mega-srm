@@ -30,8 +30,9 @@ model User {
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
 
-  documents Document[]
-  versions  DocumentVersion[]
+  documents       Document[]
+  versions        DocumentVersion[]
+  reportDocuments ReportDocument[]
 }
 
 /// Наш ФОП (постачальник)
@@ -46,8 +47,10 @@ model OurFop {
   /// hidden from the supplier choice; kept because documents and the rahunok counter refer to it
   archived         Boolean @default(false)
 
-  counters  InvoiceCounter[]
-  documents Document[]
+  counters        InvoiceCounter[]
+  reportCounters  ReportCounter[]
+  reportDocuments ReportDocument[]
+  documents       Document[]
 }
 
 /// Клиент (справочник «Клієнти»): один или несколько ФОП-получателей
@@ -58,8 +61,9 @@ model Client {
   comment   String   @default("")
   createdAt DateTime @default(now())
 
-  fops  ClientFop[]
-  codes ClientCode[]
+  fops            ClientFop[]
+  codes           ClientCode[]
+  reportDocuments ReportDocument[]
 }
 
 /// Client's own product code → our SKU (learned from barcodes in client reports, or set by hand)
@@ -190,4 +194,45 @@ model Label {
 
   @@unique([setId, sku])
   @@index([setId])
+}
+
+enum ReportDocKind {
+  POVERNENNYA
+  PEREOTSINKA
+}
+
+/// Revaluation documents built from client reports (no SalesDrive order): «Накладна на повернення» and «Видаткова накладна (переоцінка)».
+/// Kept apart from Document so order numbering, its unique index and labels are untouched.
+model ReportDocument {
+  id           Int           @id @default(autoincrement())
+  kind         ReportDocKind
+  number       Int
+  date         DateTime      @db.Date
+  clientId     Int?
+  /// our FOP whose counter numbered it (recipient in povernennya, supplier in pereotsinka); null if neither side is ours
+  counterFopId Int?
+  status       DocStatus     @default(ACTIVE)
+  headerJson   Json
+  linesJson    Json
+  totalsJson   Json
+  createdById  Int
+  createdAt    DateTime      @default(now())
+
+  client     Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  counterFop OurFop? @relation(fields: [counterFopId], references: [id], onDelete: SetNull)
+  createdBy  User    @relation(fields: [createdById], references: [id])
+
+  @@index([kind, counterFopId, date])
+}
+
+model ReportCounter {
+  kind  ReportDocKind
+  fopId Int
+  year  Int
+  month Int
+  last  Int
+
+  fop OurFop @relation(fields: [fopId], references: [id], onDelete: Cascade)
+
+  @@id([kind, fopId, year, month])
 }

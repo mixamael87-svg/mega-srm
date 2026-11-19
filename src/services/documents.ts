@@ -24,8 +24,8 @@ export function parseDocDate(s: string): Date {
 }
 export const isoDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 /** Postgres DATE columns are read/written by Prisma as UTC midnight. */
-const toDb = (d: Date) => new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-const fromDb = (d: Date) => new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+export const toDb = (d: Date) => new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+export const fromDb = (d: Date) => new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 
 export function filenameFor(type: DocType, number: number, date: Date) {
   return type === 'RAHUNOK' ? `Рахунок-фактура_${number}_${isoDate(date)}.xlsx` : `Видаткова_накладна_${number}_${isoDate(date)}.xlsx`;
