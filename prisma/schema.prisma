@@ -58,7 +58,22 @@ model Client {
   comment   String   @default("")
   createdAt DateTime @default(now())
 
-  fops ClientFop[]
+  fops  ClientFop[]
+  codes ClientCode[]
+}
+
+/// Client's own product code → our SKU (learned from barcodes in client reports, or set by hand)
+model ClientCode {
+  clientId  Int
+  code      String
+  sku       String
+  /// 'barcode' | 'manual' — learning from barcodes never overwrites a manual mapping
+  source    String
+  updatedAt DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@id([clientId, code])
 }
 
 /// ФОП клиента (одержувач документа)
