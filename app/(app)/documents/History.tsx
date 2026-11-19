@@ -71,6 +71,50 @@ export function History() {
         </table>
       </div>
       {labels && <LabelsDialog list={labels} onClose={() => setLabels(null)} />}
+      <ReportDocuments />
+    </>
+  );
+}
+
+type ReportRow = { id: number; kind: 'POVERNENNYA' | 'PEREOTSINKA'; number: number; date: string; status: 'ACTIVE' | 'ANNULLED'; clientName: string; netKop: number; createdBy: string };
+
+/** Revaluation documents (from «Звіти клієнтів») — listed here next to order documents. */
+function ReportDocuments() {
+  const [rows, setRows] = useState<ReportRow[]>([]);
+  const [error, setError] = useState('');
+  const load = async () => { const r = await fetch('/api/report-documents'); if (r.ok) setRows(await r.json()); };
+  useEffect(() => { void load(); }, []);
+  async function annul(r: ReportRow) {
+    if (!confirm(`Анулювати ${r.kind === 'POVERNENNYA' ? 'накладну на повернення' : 'накладну (переоцінка)'} № ${r.number}?`)) return;
+    const res = await fetch(`/api/report-documents/${r.id}/annul`, { method: 'POST' });
+    if (res.ok) await load(); else setError((await res.json()).error);
+  }
+  if (rows.length === 0) return null;
+  return (
+    <>
+      <h2 style={{ marginTop: 24 }}>Документи переоцінки</h2>
+      {error && <div className="card error">{error}</div>}
+      <div className="card">
+        <table>
+          <thead><tr><th>Тип</th><th>№</th><th>Дата</th><th>Клієнт</th><th className="num">Сума</th><th>Статус</th><th></th></tr></thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.id}>
+                <td>{r.kind === 'POVERNENNYA' ? 'Повернення' : 'Накладна (переоцінка)'}</td>
+                <td>{r.number}</td>
+                <td>{r.date.split('-').reverse().join('.')}</td>
+                <td>{r.clientName}</td>
+                <td className="num">{kop(r.netKop)}</td>
+                <td>{r.status === 'ANNULLED' ? <span className="pill annulled">анульовано</span> : <span className="pill">активний</span>}</td>
+                <td className="num">
+                  <button onClick={() => downloadUrl(`/api/report-documents/${r.id}/file`)}>Завантажити</button>{' '}
+                  {r.status === 'ACTIVE' && <button onClick={() => annul(r)}>Анулювати</button>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }
