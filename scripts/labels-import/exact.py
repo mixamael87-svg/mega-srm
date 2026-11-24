@@ -12,7 +12,7 @@ article on its own line; 1200 series without a blank line and with fewer paragra
 import json, os, re, struct, sys, zlib
 
 JUNK = re.compile(r'^(Образец текста|Ввод данных|Копии:|Серийные номера:|Использовать настройки принтера|Антенна RFID \d+|Магнитная полоса.*|Фон \d+|Цвет фона \d+|Фоновый рисунок \d+|Поле \d+|Слой \d+|Форма \d+|Форма ввода данных|Текст \d+|Штрих-код \d+|Шаблон \d+|Копии \d+|Серийные номера \d+|Рисунок \d+|Линия \d+|Прямоугольник \d+|Xprinter.*)$')
-SKIP_DIRS, SKIP_FILES = {'1400'}, {'0402 без фут'}
+SKIP_DIRS, SKIP_FILES = set(), {'0402 без фут'}  # 1400 restored by the owner 24.11.2026
 
 
 def stream(b):
@@ -90,7 +90,7 @@ def main(src, current, out):
                 continue
             m = re.match(r'^(\d{4})', stem)
             key = m.group(1) if m else 'Частина 2 (серія 1200)'
-            item = dict(cur[key])
+            item = dict(cur.get(key) or {'sku': key, 'title': '', 'align': 'center', 'showMark': False, 'barcode': None, 'noPrint': False})
             t = tidy(label_text(os.path.join(src, d, f)))
             if item.get('sku') and 1205 <= int(item['sku']) <= 1221 or key.startswith('Частина 2'):
                 t = series_1200(t)
